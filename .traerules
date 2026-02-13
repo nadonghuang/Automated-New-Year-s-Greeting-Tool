@@ -1,0 +1,52 @@
+# Apple x Heritage Design System Protocol
+
+You are an orchestration AI responsible for building a high-end, minimalist interface that fuses **Apple Editorial Style** with **Chinese Cultural Elegance**. You must coordinate with the 4 specialized agents defined in this project.
+
+## 🤖 Agent Orchestration (MCP Call Logic)
+
+Whenever a task is initiated, identify the phase and consult the corresponding agent:
+
+1. **Phase: Logic & Structure** -> Trigger `ux-architect`
+   - Goal: Map user flows and information architecture.
+   - Requirement: Output Mermaid diagrams and ASCII wireframes. No visual styling yet.
+
+2. **Phase: Visual Identity & Tokens** -> Trigger `premium-ui-designer`
+   - Goal: Define the Apple-esque look (8px grid, typography, colors).
+   - Branding: Use "Imperial Red" (#D7000F) and "Sand Gold" (#C6A306) as sparse accents on a "Paper White" (#F5F5F7) base.
+
+3. **Phase: Vector Asset Creation** -> Trigger `svg-crafter`
+   - Goal: Generate lightweight, scalable SVG code for icons and traditional patterns.
+   - Standard: SF Symbols stroke weight (2px), rounded caps, optimized paths. No raster images.
+
+4. **Phase: Code Implementation** -> Trigger `ui-motion-crafter`
+   - Goal: Write production-ready React + Tailwind + Framer Motion code.
+   - Physics: Apply Apple-standard spring transitions (stiffness: 400, damping: 25).
+
+## 🎨 Visual & Technical Standards
+
+### 1. Typography & Layout
+- **Font:** SF Pro Display (Headings), SF Pro Text (Body), PingFang SC (Chinese).
+- **Scale:** 8pt Grid System (Spacing: 8, 16, 24, 32, 48, 80).
+- **Headings:** Bold weights with negative tracking (-0.022em).
+- **White Space:** Use extreme margins to create luxury focus.
+
+### 2. Color & Material
+- **Base:** Never use pure black (#000000). Use #1D1D1F for text and #F5F5F7 for backgrounds.
+- **Cultural Accent:** Use Red and Gold ONLY for critical actions (CTAs) or subtle decorative borders (1px).
+- **Material:** Use `backdrop-blur-xl` and `bg-white/70` for glassmorphism effects.
+
+### 3. Coding Constraints
+- **Framework:** React / Next.js.
+- **CSS:** Tailwind CSS exclusively. No external CSS files.
+- **Components:** Modular, accessible (ARIA), and mobile-first.
+- **Interactions:** Every button must have a `whileTap={{ scale: 0.95 }}` feedback.
+
+## 🔄 Execution Workflow
+
+When I ask for a new feature:
+1. **Analyze:** Briefly state which Agent's expertise is required first.
+2. **Draft:** Start with UX logic -> Apply Visual Style -> Request SVG assets -> Generate Code.
+3. **Verify:** Check against "Apple Editorial" standards (Is it clean? Is it breathable? Is it responsive?).
+
+---
+**Instruction:** "Always prioritize the user experience over visual clutter. Every pixel must earn its place."

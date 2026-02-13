@@ -42,10 +42,6 @@ class GenerateRequest(BaseModel):
 class ManualInputRequest(BaseModel):
     text: str
 
-class LocalDBSyncRequest(BaseModel):
-    db_path: str
-    key_hex: str
-
 class QuestionRequest(BaseModel):
     contact_name: str
     history: list
@@ -103,66 +99,6 @@ def start_wechat_login():
 @app.get("/wechat/status")
 def get_login_status():
     return wechat_service.get_status()
-
-import mac_reader
-import vision_scanner
-
-@app.get("/wechat/mac_read")
-def get_mac_contacts_bridge():
-    # Previous manual mac reader
-    contacts = mac_reader.get_mac_contacts()
-    return {"friends": contacts}
-
-@app.get("/wechat/auto_scan")
-async def start_auto_scan():
-    """
-    Triggers the robot to scroll and scan.
-    Note: In a real world, this should be a background task to avoid timeout.
-    """
-    scanner = vision_scanner.get_scanner()
-    results = scanner.auto_scan()
-    
-    if isinstance(results, dict) and "error" in results:
-        raise HTTPException(status_code=500, detail=results["error"])
-        
-    return {"friends": results}
-
-@app.get("/wechat/auto_scan/status")
-def get_scan_status():
-    scanner = vision_scanner.get_scanner()
-    return {"scanning": scanner.scanning}
-
-@app.get("/wechat/check_permissions")
-def check_permissions_api():
-    scanner = vision_scanner.get_scanner()
-    return scanner.check_permissions()
-
-import db_decrypt_service
-
-@app.get("/wechat/local_db/detect")
-def detect_local_dbs():
-    paths = db_decrypt_service.get_possible_db_paths()
-    return {"paths": paths}
-
-@app.post("/wechat/local_db/sync")
-def sync_local_db(req: LocalDBSyncRequest):
-    decrypter = db_decrypt_service.WeChatDBDecrypt(req.db_path, req.key_hex)
-    temp_out = "decrypted_contact_temp.db"
-    
-    success, msg = decrypter.decrypt(temp_out)
-    if not success:
-        raise HTTPException(status_code=400, detail=f"解密失败: {msg}")
-        
-    try:
-        contacts = db_decrypt_service.extract_contacts(temp_out)
-        # Cleanup
-        if os.path.exists(temp_out):
-            os.remove(temp_out)
-        return {"friends": contacts}
-    except Exception as e:
-        if os.path.exists(temp_out):
-            os.remove(temp_out)
-        raise HTTPException(status_code=500, detail=f"扫描失败: {str(e)}")
 
 @app.get("/wechat/friends")
 def get_friends():

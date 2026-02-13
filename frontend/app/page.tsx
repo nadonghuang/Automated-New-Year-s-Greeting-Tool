@@ -6,12 +6,10 @@ import { Settings, Sparkles, MessageSquareHeart, Send, ShieldAlert, Zap, Github,
 import { motion, AnimatePresence } from "framer-motion";
 import LoginQRCode from "@/components/LoginQRCode";
 import ManualInput from "@/components/ManualInput";
-import SmartScanner from "@/components/SmartScanner";
 import ContactSourceSelector from "@/components/ContactSourceSelector";
 import ContactList from "@/components/ContactList";
 import Questionnaire from "@/components/Questionnaire";
 import GreetingReview from "@/components/GreetingReview";
-import LocalDBSync from "@/components/LocalDBSync";
 import { cn, API_BASE_URL } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -26,7 +24,7 @@ interface Contact {
 }
 
 export default function Home() {
-  const [mode, setMode] = useState<'scan' | 'manual' | 'db'>('manual');
+  const [mode, setMode] = useState<'scan' | 'manual'>('manual');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
 
@@ -221,31 +219,34 @@ export default function Home() {
           {contacts.length === 0 ? (
             <motion.div
               key="welcome"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="flex-1 flex flex-col items-center justify-center py-10"
+              initial={{ opacity: 0, x: -30 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 30 }}
+              className="flex-1 flex flex-row items-center gap-12 min-h-0"
             >
-              {/* Hero Section */}
-              <div className="text-center mb-16 relative">
-                <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-64 h-64 bg-cny-red/10 blur-[100px] -z-10" />
-                <div className="inline-flex items-center gap-2 bg-red-950/40 text-cny-gold px-5 py-2.5 rounded-full text-xs font-black mb-8 border border-cny-red/30 shadow-2xl backdrop-blur-md">
-                  <Zap className="w-4 h-4 fill-current animate-pulse" />
-                  2026 丙午马年特别版 · AI 引擎已启动
+              {/* Left Side: Hero Section */}
+              <div className="flex-1 flex flex-col justify-center max-w-xl">
+                <div className="relative">
+                  <div className="absolute -top-20 left-0 w-64 h-64 bg-cny-red/10 blur-[100px] -z-10" />
+                  <div className="inline-flex items-center gap-2 bg-red-950/40 text-cny-gold px-5 py-2.5 rounded-full text-xs font-black mb-8 border border-cny-red/30 shadow-2xl backdrop-blur-md">
+                    <Zap className="w-4 h-4 fill-current animate-pulse" />
+                    2026 丙午马年特别版 · AI 引擎已启动
+                  </div>
+                  <h2 className="text-5xl md:text-7xl font-black text-white mb-8 tracking-tighter leading-none">
+                    龙腾盛世 <br /> <span className="neo-text-gold italic">马到成功</span>
+                  </h2>
+                  <p className="text-gray-400 text-lg font-medium leading-relaxed opacity-80 mb-12">
+                    融合前沿 AI 技术与千年贺岁文化。不仅仅是祝福，更是一场沉浸式数字庆典。
+                  </p>
+                  
+                  <div className="glass-tech p-2 rounded-[40px] inline-block">
+                    <ContactSourceSelector mode={mode} setMode={setMode} />
+                  </div>
                 </div>
-                <h2 className="text-5xl md:text-8xl font-black text-white mb-8 tracking-tighter leading-none">
-                  龙腾盛世 <br /> <span className="neo-text-gold italic">马到成功</span>
-                </h2>
-                <p className="text-gray-400 text-xl max-w-2xl mx-auto font-medium leading-relaxed opacity-80">
-                  融合前沿 AI 技术与千年贺岁文化。不仅仅是祝福，更是一场沉浸式数字庆典。
-                </p>
               </div>
 
-              <div className="glass-tech p-2 rounded-[40px] mb-8">
-                <ContactSourceSelector mode={mode} setMode={setMode} />
-              </div>
-
-              <motion.div layout className="w-full max-w-3xl">
+              {/* Right Side: Input Section */}
+              <motion.div layout className="flex-1 max-w-2xl h-full flex flex-col justify-center">
                 {mode === 'scan' ? (
                   <div className="p-10 glass-tech rounded-[48px] shadow-2xl relative overflow-hidden corner-motif">
                     <LoginQRCode onLoginSuccess={async () => {
@@ -254,16 +255,11 @@ export default function Home() {
                     }} />
                     <div className="mt-10 p-6 bg-red-950/40 rounded-3xl flex items-start gap-4 border border-cny-red/20 backdrop-blur-md">
                       <ShieldAlert className="w-6 h-6 text-cny-gold mt-1" />
-                      <div className="text-sm text-gray-300">扫码登录受微信安全策略限制。若无法接入，请尝试“本地数据库”或“智能录入”。</div>
+                      <div className="text-sm text-gray-300">扫码登录受微信安全策略限制。若无法接入，请尝试“智能录入”。</div>
                     </div>
                   </div>
-                ) : mode === 'db' ? (
-                  <LocalDBSync onContactsLoaded={handleContactsLoaded} />
                 ) : (
                   <div className="space-y-6">
-                    <div className="glass-tech p-1 rounded-[40px] corner-motif">
-                      <SmartScanner onContactsLoaded={handleContactsLoaded} />
-                    </div>
                     <div className="glass-tech p-1 rounded-[40px] corner-motif">
                       <ManualInput onParsed={handleContactsLoaded} />
                     </div>
