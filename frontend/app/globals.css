@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cny-red: #cc0000;
+  --color-cny-gold: #ffd700;
+  --color-tech-cyan: #00ffff;
+  
+  --animate-tech-spark: tech-spark 2s infinite;
+  --animate-scan-fast: scan-fast 1.5s linear infinite;
+  
+  @keyframes tech-spark {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+  
+  @keyframes scan-fast {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+}
+
+:root {
+  --background: #000000;
+  --foreground: #ededed;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@utility glass-tech {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+@utility neo-text-gold {
+  color: transparent;
+  background-clip: text;
+  background-image: linear-gradient(to bottom, #ffd700, #b8860b);
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+@utility neo-text-red {
+  color: transparent;
+  background-clip: text;
+  background-image: linear-gradient(to bottom, #ff3333, #990000);
+  text-shadow: 0 0 20px rgba(204, 0, 0, 0.3);
+}
+
+@utility btn-hongbao {
+  background: linear-gradient(135deg, #cc0000 0%, #8b0000 100%);
+  box-shadow: 0 10px 30px -10px rgba(204, 0, 0, 0.5);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+@utility festive-tech-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(circle at 50% 50%, #1a0505 0%, #000000 100%);
+}
+
+@utility festive-tech-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image: 
+    linear-gradient(rgba(204, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(204, 0, 0, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  mask-image: radial-gradient(circle at center, black, transparent 80%);
+}
+
+@utility corner-motif {
+  position: relative;
+}
+
+.corner-motif::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-top: 2px solid rgba(255, 215, 0, 0.3);
+  border-left: 2px solid rgba(255, 215, 0, 0.3);
+  border-top-left-radius: 12px;
+  pointer-events: none;
+}
+
+.corner-motif::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+  border-right: 2px solid rgba(255, 215, 0, 0.3);
+  border-bottom-right-radius: 12px;
+  pointer-events: none;
+}
+
+@utility gold-particle {
+  position: absolute;
+  top: -10px;
+  width: 2px;
+  height: 2px;
+  background: #ffd700;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #ffd700;
+  animation: fall var(--fall-duration) linear infinite;
+  animation-delay: var(--delay);
+}
+
+@keyframes fall {
+  to {
+    transform: translateY(100vh);
+  }
+}
