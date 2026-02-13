@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+openai
+python-multipart
+qrcode
+pillow
+pyautogui
+easyocr
+opencv-python-headless
+pyobjc-framework-quartz; sys_platform == 'darwin'
+pydantic
+itchat
