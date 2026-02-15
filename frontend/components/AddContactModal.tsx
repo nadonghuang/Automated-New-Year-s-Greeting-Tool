@@ -36,50 +36,50 @@ export default function AddContactModal({ isOpen, onClose, onAdd }: AddContactMo
                         initial={{ scale: 0.9, opacity: 0, y: 20 }}
                         animate={{ scale: 1, opacity: 1, y: 0 }}
                         exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                        className="glass-tech rounded-[40px] p-10 max-w-md w-full shadow-[0_0_80px_rgba(230,0,0,0.15)] relative overflow-hidden border border-white/10"
+                        className="glass-tech rounded-[32px] p-8 max-w-md w-full shadow-premium relative overflow-hidden border border-white/5"
                     >
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-cny-red/20 rounded-full blur-[100px] pointer-events-none" />
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-cny-red/10 rounded-full blur-[100px] pointer-events-none" />
                         
                         <button
                             onClick={handleClose}
-                            className="absolute top-6 right-6 w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all border border-white/10"
+                            className="absolute top-6 right-6 w-8 h-8 rounded-lg bg-white/[0.02] hover:bg-white/[0.08] flex items-center justify-center text-gray-500 hover:text-white transition-all border border-white/5"
                         >
-                            <X size={18} />
+                            <X size={16} />
                         </button>
 
                         <div className="relative z-10">
                             <div className="flex items-center gap-4 mb-8">
-                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cny-red to-red-950 flex items-center justify-center text-cny-gold shadow-2xl border border-cny-gold/20">
-                                    <UserPlus size={28} />
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cny-red to-red-950 flex items-center justify-center text-cny-gold shadow-2xl border border-cny-gold/20">
+                                    <UserPlus size={24} />
                                 </div>
                                 <div>
-                                    <h3 className="text-2xl font-black text-white tracking-tight">添加好友</h3>
-                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">Add New Contact</p>
+                                    <h3 className="text-xl font-black text-white tracking-tight">添加好友</h3>
+                                    <p className="text-[8px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">Add New Contact</p>
                                 </div>
                             </div>
 
-                            <div className="space-y-6">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-cny-gold uppercase tracking-[0.3em] pl-1">好友名称 *</label>
+                            <div className="space-y-5">
+                                <div className="space-y-2">
+                                    <label className="text-[8px] font-black text-cny-gold uppercase tracking-[0.3em] pl-1">好友名称 *</label>
                                     <input
                                         type="text"
                                         value={name}
                                         onChange={(e) => setName(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                                        className="w-full p-5 rounded-2xl bg-black/40 border-2 border-white/5 focus:border-cny-red/50 focus:bg-black/60 outline-none transition-all font-bold text-white placeholder:text-gray-700"
+                                        className="w-full p-4 rounded-xl bg-black/20 border border-white/5 focus:border-cny-red/20 focus:bg-black/40 outline-none transition-all font-bold text-white text-sm placeholder:text-gray-700"
                                         placeholder="输入好友姓名..."
                                         autoFocus
                                     />
                                 </div>
 
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] pl-1">备注（可选）</label>
+                                <div className="space-y-2">
+                                    <label className="text-[8px] font-black text-gray-500 uppercase tracking-[0.3em] pl-1">备注（可选）</label>
                                     <input
                                         type="text"
                                         value={remark}
                                         onChange={(e) => setRemark(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                                        className="w-full p-5 rounded-2xl bg-black/40 border-2 border-white/5 focus:border-cny-red/50 focus:bg-black/60 outline-none transition-all font-bold text-white placeholder:text-gray-700"
+                                        className="w-full p-4 rounded-xl bg-black/20 border border-white/5 focus:border-cny-red/20 focus:bg-black/40 outline-none transition-all font-bold text-white text-sm placeholder:text-gray-700"
                                         placeholder="添加备注信息..."
                                     />
                                 </div>
@@ -87,16 +87,16 @@ export default function AddContactModal({ isOpen, onClose, onAdd }: AddContactMo
                                 <div className="flex gap-3 pt-4">
                                     <button
                                         onClick={handleClose}
-                                        className="flex-1 py-5 rounded-2xl border border-white/10 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all text-sm font-black uppercase tracking-widest"
+                                        className="flex-1 py-4 rounded-xl border border-white/5 bg-white/[0.02] text-gray-500 hover:bg-white/[0.08] hover:text-white transition-all text-[10px] font-black uppercase tracking-widest"
                                     >
                                         取消
                                     </button>
                                     <button
                                         onClick={handleSubmit}
                                         disabled={!name.trim()}
-                                        className="flex-1 bg-gradient-to-r from-cny-red to-[#800] text-white py-5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl shadow-red-950/40 hover:shadow-cny-red/30 disabled:opacity-30 flex items-center justify-center gap-2 border border-cny-gold/20"
+                                        className="flex-1 btn-hongbao text-white py-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all disabled:opacity-20 flex items-center justify-center gap-2 border border-cny-gold/20"
                                     >
-                                        <Sparkles size={16} />
+                                        <Sparkles size={14} />
                                         确认添加
                                     </button>
                                 </div>

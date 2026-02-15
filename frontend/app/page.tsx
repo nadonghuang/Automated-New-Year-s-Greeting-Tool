@@ -192,7 +192,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-cny-red/30 selection:text-cny-gold overflow-hidden relative">
+    <main className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-cny-red/30 selection:text-cny-gold overflow-hidden relative h-screen">
       {/* Festive Tech Layered Background */}
       <div className="festive-tech-bg" />
       <div className="festive-tech-grid" />
@@ -226,32 +226,32 @@ export default function Home() {
       </div>
 
       {/* Header */}
-      <header className="relative z-50 backdrop-blur-3xl bg-black/60 border-b border-cny-red/20 sticky top-0 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
-        <div className="max-w-7xl mx-auto px-6 h-24 flex justify-between items-center">
-          <div className="flex items-center gap-5 group cursor-pointer">
+      <header className="relative z-50 backdrop-blur-3xl bg-black/40 border-b border-white/5 sticky top-0 shadow-premium">
+        <div className="max-w-7xl mx-auto px-8 h-20 flex justify-between items-center">
+          <div className="flex items-center gap-6 group cursor-pointer">
             <div className="relative">
               <div className="absolute inset-0 bg-cny-gold blur-2xl opacity-0 group-hover:opacity-40 transition-opacity duration-500" />
-              <div className="w-16 h-16 bg-gradient-to-br from-cny-red to-red-800 rounded-2xl flex items-center justify-center text-cny-gold shadow-2xl group-hover:rotate-[360deg] transition-transform duration-1000 relative z-10 border border-cny-gold/20">
-                <span className="text-3xl font-black neo-text-gold">福</span>
+              <div className="w-14 h-14 bg-gradient-to-br from-cny-red to-red-800 rounded-2xl flex items-center justify-center text-cny-gold shadow-2xl group-hover:rotate-[360deg] transition-transform duration-1000 relative z-10 border border-cny-gold/20">
+                <span className="text-2xl font-black neo-text-gold">福</span>
               </div>
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight flex items-center gap-3">
+              <h1 className="text-xl font-black tracking-tight flex items-center gap-3">
                 <span className="neo-text-gold">AI 贺岁</span> 助手
-                <div className="px-2 py-0.5 rounded-lg bg-red-950/50 text-cny-gold text-[9px] font-black uppercase tracking-wider border border-cny-gold/20">2026 丙午马年</div>
+                <div className="px-2 py-0.5 rounded-lg bg-red-950/50 text-cny-gold text-[8px] font-black uppercase tracking-wider border border-cny-gold/20">2026 丙午马年</div>
               </h1>
-              <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mt-1 opacity-60">Techno-Festive Personalized Engine</p>
+              <p className="text-[8px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1 opacity-60">Techno-Festive Personalized Engine</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="hidden lg:flex items-center gap-2.5 bg-black/40 px-4 py-2 rounded-xl border border-white/10 shadow-xl glass-tech">
+          <div className="flex items-center gap-8">
+            <div className="hidden lg:flex items-center gap-3 bg-white/[0.02] px-4 py-2 rounded-full border border-white/5 shadow-inner">
               <div className="w-1.5 h-1.5 bg-cny-gold rounded-full shadow-[0_0_8px_var(--cny-gold)] animate-pulse" />
-              <span className="text-[9px] font-black text-cny-gold uppercase tracking-widest">量子吉语引擎运行中</span>
+              <span className="text-[8px] font-black text-cny-gold/80 uppercase tracking-[0.3em]">量子吉语引擎运行中</span>
             </div>
             <button
               onClick={() => setShowConfig(true)}
-              className="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-white/10 text-gray-400 hover:text-cny-gold rounded-xl transition-all border border-white/10 active:scale-95 shadow-lg"
+              className="w-10 h-10 flex items-center justify-center bg-white/[0.03] hover:bg-white/[0.08] text-gray-400 hover:text-cny-gold rounded-xl transition-all border border-white/5 active:scale-95"
             >
               <Settings className="w-5 h-5" />
             </button>
@@ -260,7 +260,7 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <div className="relative z-10 flex-1 max-w-7xl mx-auto w-full p-6 flex flex-col gap-6 overflow-hidden">
+      <div className="relative z-10 flex-1 max-w-7xl mx-auto w-full p-8 flex flex-col gap-8 overflow-hidden h-[calc(100vh-80px)]">
         <AnimatePresence mode="wait">
           {contacts.length === 0 ? (
             <motion.div
@@ -318,7 +318,7 @@ export default function Home() {
               key="dashboard"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex-1 flex flex-col md:flex-row gap-8 min-h-0"
+              className="flex-1 flex flex-col md:flex-row gap-8 min-h-0 h-full overflow-hidden"
             >
               {/* Left Side: Contact List */}
               <div className="w-full md:w-80 lg:w-[400px] flex flex-col h-full overflow-hidden">
@@ -336,7 +336,7 @@ export default function Home() {
                   <span className="text-[40rem] font-black text-white leading-none">马</span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto relative z-10">
+                <div className="flex-1 overflow-y-auto relative z-10 scrollbar-hide">
                   <AnimatePresence mode="wait">
                     {!selectedContact ? (
                       <motion.div
@@ -431,9 +431,10 @@ export default function Home() {
                 </div>
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+          )
+        }
+      </AnimatePresence>
+    </div>
 
       {/* Config Modal */}
       <AnimatePresence>
