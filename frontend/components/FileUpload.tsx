@@ -67,6 +67,9 @@ export default function FileUpload({ onParsed }: FileUploadProps) {
             onParsed(res.data.friends);
             toast.success(`成功导入 ${res.data.friends.length} 位好友`);
             setFile(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
         } catch (e: any) {
             toast.error(e.response?.data?.detail || "解析失败，请检查文件格式");
         } finally {

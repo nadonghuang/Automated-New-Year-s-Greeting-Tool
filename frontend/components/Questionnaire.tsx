@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, PenTool, MessageCircle, Wand2, X, BrainCircuit, Loader2, Sparkles } from "lucide-react";
+import { ChevronRight, ChevronLeft, PenTool, MessageCircle, Wand2, X, BrainCircuit, Loader2, Sparkles } from "lucide-react";
 import { cn, API_BASE_URL } from "@/lib/utils";
 import axios from "axios";
 import { toast } from "sonner";
@@ -58,10 +58,6 @@ const BASIC_QUESTIONS = [
         options: ["简短有力（50字以内）", "适中精炼（50-100字）", "走心长文（100-200字）", "超长深情（200字以上）", "随AI发挥，不限字数"]
     },
     {
-        question: "祝福语使用什么语言？",
-        options: ["纯中文", "中英双语对照", "纯英文", "中文为主，穿插几句英文点缀"]
-    },
-    {
         question: "过去一年，你们之间有什么共同回忆或对方有哪些值得庆贺的成就？",
         options: ["一起旅行过", "对方刚升职/事业有成", "低谷时互相支持过", "生活中的小确幸", "对方刚结婚/有了宝宝", "暂无特别回忆"]
     },
@@ -74,30 +70,26 @@ const BASIC_QUESTIONS = [
         options: ["不要提感情/婚姻", "不要提工作/收入", "不要提年龄/健康", "不要提孩子/生育", "没有禁忌，随便写"]
     },
     {
-        question: "需要在祝福语中加入表情符号（emoji）吗？",
-        options: ["要！多来几个🎉🧧🐴", "适当点缀几个就好", "不要emoji，纯文字更真诚", "随AI判断"]
-    },
-    {
-        question: "关于马年元素和特殊要求🐴",
+        question: "关于马年元素和特殊要求",
         options: ["必须包含'马'字成语（如马到成功）", "融入马年意象但不要刻意", "加入对方名字的谐音梗", "引用一句诗词或名言", "不需要特殊花样", "我想自己补充要求"]
     }
 ];
 
 export default function Questionnaire({ 
     contactName, 
+    contactId,
     onSubmit, 
     onCancel,
     onStepChange,
     initialState,
-    contactId,
     defaultModel
 }: { 
     contactName: string, 
-    onSubmit: (greeting: string) => void, 
+    contactId: string,
+    onSubmit: (greeting: string, contactId: string) => void, 
     onCancel: () => void,
     onStepChange?: (step: TaskStep, data?: { basicIndex?: number; history?: HistoryEntry[]; selectedModel?: string; aiQuestionCount?: number; greeting?: string; currentAIQuestion?: { question: string; options: string[] } | null }) => void,
     initialState?: InitialState,
-    contactId?: string,
     defaultModel?: string
 }) {
     const hasDefaultModel = !!defaultModel;
@@ -250,7 +242,12 @@ export default function Questionnaire({
         setCustomAnswer("");
         setCurrentAIQuestion(null);
         onStepChange?.("ai_deep", { history: newHistory, selectedModel, aiQuestionCount: newCount, currentAIQuestion: null });
-        fetchAIQuestion(selectedModel, newHistory);
+        
+        if (newCount >= 10) {
+            generateGreeting(selectedModel, newHistory);
+        } else {
+            fetchAIQuestion(selectedModel, newHistory);
+        }
     };
 
     // ========== Step 4: Generate final greeting ==========
@@ -264,7 +261,7 @@ export default function Questionnaire({
                 model: modelId
             });
             onStepChange?.("review", { greeting: res.data.greeting, history: finalHistory, selectedModel: modelId });
-            onSubmit(res.data.greeting);
+            onSubmit(res.data.greeting, contactId);
         } catch (e) {
             toast.error("生成最终祝福时出错，请检查网络");
             setStep("ai_deep");
@@ -406,9 +403,9 @@ export default function Questionnaire({
                             )}
                         </div>
 
-                        {/* Progress Track */}
-                        <div className="mt-10">
-                            <div className="flex justify-between items-center mb-3">
+                        {/* Navigation & Progress */}
+                        <div className="mt-10 space-y-4">
+                            <div className="flex justify-between items-center">
                                 <div className="flex flex-col">
                                     <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">基础信息同步中</span>
                                     <span className="text-[9px] text-cny-red font-bold mt-0.5">Step {basicIndex + 1} / {BASIC_QUESTIONS.length}</span>
@@ -422,6 +419,15 @@ export default function Questionnaire({
                                     animate={{ width: `${((basicIndex + 1) / BASIC_QUESTIONS.length) * 100}%` }}
                                 />
                             </div>
+                            {basicIndex > 0 && (
+                                <button
+                                    onClick={() => setBasicIndex(prev => prev - 1)}
+                                    className="w-full py-4 rounded-2xl bg-white/5 text-gray-400 font-bold hover:bg-white/10 hover:text-white transition-all border border-white/10 text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+                                >
+                                    <ChevronLeft size={16} />
+                                    返回上一题
+                                </button>
+                            )}
                         </div>
                     </motion.div>
                 )}
@@ -459,12 +465,12 @@ export default function Questionnaire({
                             ) : null}
                         </div>
 
-                        {/* Progress Track */}
-                        <div className="mt-10">
-                            <div className="flex justify-between items-center mb-3">
+                        {/* Progress & Actions */}
+                        <div className="mt-10 space-y-4">
+                            <div className="flex justify-between items-center">
                                 <div className="flex flex-col">
                                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                        {aiQuestionCount < 2 ? "🔍 挖掘背景细节" : "✨ 润色情感风格"}
+                                        {aiQuestionCount < 2 ? "挖掘背景细节" : "润色情感风格"}
                                     </span>
                                     <span className="text-[9px] text-cny-gold font-bold mt-0.5">算法深度迭代: Phase {aiQuestionCount} / 4</span>
                                 </div>
@@ -479,6 +485,24 @@ export default function Questionnaire({
                                     initial={{ width: '0%' }}
                                     animate={{ width: `${Math.min(100, (aiQuestionCount / 4) * 100)}%` }}
                                 />
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => {
+                                        setStep("basic");
+                                        setBasicIndex(BASIC_QUESTIONS.length - 1);
+                                    }}
+                                    className="flex-1 py-4 rounded-2xl bg-white/5 text-gray-400 font-bold hover:bg-white/10 hover:text-white transition-all border border-white/10 text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+                                >
+                                    <ChevronLeft size={16} />
+                                    返回基础问题
+                                </button>
+                                <button
+                                    onClick={() => generateGreeting(selectedModel, history)}
+                                    className="flex-1 py-4 rounded-2xl bg-cny-gold/20 text-cny-gold font-bold hover:bg-cny-gold/30 transition-all border border-cny-gold/30 text-xs uppercase tracking-widest"
+                                >
+                                    跳过，直接生成
+                                </button>
                             </div>
                         </div>
                     </motion.div>

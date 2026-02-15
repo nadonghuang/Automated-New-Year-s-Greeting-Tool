@@ -12,6 +12,7 @@ import pandas as pd
 import os
 import logging
 import config
+import threading
 
 # Configure logging
 logging.basicConfig(
@@ -41,18 +42,22 @@ app.add_middleware(
 class GeneratorStorage:
     _instance = None
     _generator = None
+    _lock = threading.Lock()
 
     @classmethod
     def set_generator(cls, generator: Generator):
-        cls._generator = generator
+        with cls._lock:
+            cls._generator = generator
 
     @classmethod
     def get_generator(cls) -> Optional[Generator]:
-        return cls._generator
+        with cls._lock:
+            return cls._generator
 
     @classmethod
     def clear_generator(cls):
-        cls._generator = None
+        with cls._lock:
+            cls._generator = None
 
 class ConfigRequest(BaseModel):
     api_key: str = Field(..., min_length=10, max_length=200, description="OpenRouter API Key")
@@ -126,6 +131,8 @@ def get_final_greeting(req: FinalGreetingRequest, request: Request):
 @app.post("/contacts/export")
 @limiter.limit("10/minute")
 def export_contacts(req: ExportRequest, request: Request):
+    import tempfile
+    
     contacts_data = []
     for c in req.contacts:
         contacts_data.append({
@@ -137,23 +144,27 @@ def export_contacts(req: ExportRequest, request: Request):
     
     df = pd.DataFrame(contacts_data)
     
-    filename = "wechat_greetings_export.csv"
-    df.to_csv(filename, index=False, encoding='utf-8-sig')
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8-sig') as f:
+        df.to_csv(f.name, index=False, encoding='utf-8-sig')
+        temp_path = f.name
     
     from fastapi.responses import FileResponse
-    return FileResponse(filename, filename=filename, media_type='text/csv')
+    return FileResponse(temp_path, filename="wechat_greetings_export.csv", media_type='text/csv')
 
 @app.post("/wechat/login")
-def start_wechat_login():
+@limiter.limit("5/minute")
+def start_wechat_login(request: Request):
     wechat_service.start_login()
     return {"status": "starting"}
 
 @app.get("/wechat/status")
-def get_login_status():
+@limiter.limit("30/minute")
+def get_login_status(request: Request):
     return wechat_service.get_status()
 
 @app.get("/wechat/friends")
-def get_friends():
+@limiter.limit("10/minute")
+def get_friends(request: Request):
     friends = wechat_service.get_friends()
     return {"count": len(friends), "friends": friends}
 
@@ -184,8 +195,13 @@ def parse_manual(req: ManualInputRequest, request: Request):
 async def parse_file(request: Request, file: UploadFile = File(...)):
     import io
     
+    MAX_FILE_SIZE = 10 * 1024 * 1024
+    
     filename = file.filename or ""
     content = await file.read()
+    
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail=f"文件过大，最大支持 {MAX_FILE_SIZE // (1024*1024)}MB")
     
     contacts = []
     header_keywords = ['name', 'nickname', '姓名', '名字', 'remark', '备注', 'greeting', '祝福']

@@ -31,7 +31,9 @@ export default function ContactList({
     const [search, setSearch] = useState("");
 
     const filtered = contacts.filter(c =>
-        c.name.includes(search) || (c.nickname && c.nickname.includes(search)) || (c.remark && c.remark.includes(search))
+        c.name.toLowerCase().includes(search.toLowerCase()) || 
+        (c.nickname && c.nickname.toLowerCase().includes(search.toLowerCase())) || 
+        (c.remark && c.remark.toLowerCase().includes(search.toLowerCase()))
     );
 
     const getAvatarColor = (name: string) => {

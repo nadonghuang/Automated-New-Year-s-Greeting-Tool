@@ -49,6 +49,7 @@ export default function Home() {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [deletedContacts, setDeletedContacts] = useState<Contact[]>([]);
   const [defaultModel, setDefaultModel] = useState("deepseek/deepseek-v3.2");
+  const [configLoading, setConfigLoading] = useState(false);
 
   // Multi-task state
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -112,10 +113,19 @@ export default function Home() {
   // Save contacts on change
   useEffect(() => {
     try {
-      localStorage.setItem("wechat_contacts", JSON.stringify(contacts));
-    } catch (e) {
+      const data = JSON.stringify(contacts);
+      const sizeInMB = new Blob([data]).size / (1024 * 1024);
+      if (sizeInMB > 4) {
+        toast.warning(`联系人数据较大 (${sizeInMB.toFixed(1)}MB)，可能接近存储限制`);
+      }
+      localStorage.setItem("wechat_contacts", data);
+    } catch (e: any) {
       console.error('Failed to save contacts to localStorage:', e);
-      toast.error('无法保存联系人数据到本地存储');
+      if (e.name === 'QuotaExceededError' || e.code === 22) {
+        toast.error('本地存储空间不足，请导出后清理部分数据');
+      } else {
+        toast.error('无法保存联系人数据到本地存储');
+      }
     }
   }, [contacts]);
 
@@ -183,6 +193,7 @@ export default function Home() {
   };
 
   const handleConfigSubmit = async () => {
+    setConfigLoading(true);
     try {
       await axios.post(`${API_BASE_URL}/config`, { api_key: apiKey });
       localStorage.setItem("wechat_api_key", apiKey);
@@ -190,20 +201,24 @@ export default function Home() {
       toast.success("系统已激活");
     } catch (e) {
       toast.error("API Key 无效或配置失败，请检查网络或 Key 是否正确。");
+    } finally {
+      setConfigLoading(false);
     }
   };
 
-  const handleGenerateComplete = (greeting: string) => {
-    if (!selectedContact) return;
+  const handleGenerateComplete = (greeting: string, contactId: string) => {
     setGeneratedGreeting(greeting);
-    setShowQuestionnaire(false);
-    setShowReview(true);
     
-    handleUpdateTask(selectedContact.id, { step: "review", greeting });
+    handleUpdateTask(contactId, { step: "review", greeting });
     
     setContacts(prev => prev.map(c => 
-      c.id === selectedContact.id ? { ...c, greeting } : c
+      c.id === contactId ? { ...c, greeting } : c
     ));
+    
+    if (activeTaskId === contactId) {
+      setShowQuestionnaire(false);
+      setShowReview(true);
+    }
   };
 
   const handleExport = async () => {
@@ -477,7 +492,7 @@ export default function Home() {
                   <span className="text-[40rem] font-black text-white leading-none">马</span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto relative z-10 scrollbar-hide">
+                <div className="flex-1 relative z-10 overflow-y-auto scrollbar-hide">
                   <AnimatePresence mode="wait">
                     {!selectedContact ? (
                       <motion.div
@@ -650,11 +665,20 @@ export default function Home() {
                   </div>
                   <button
                     onClick={handleConfigSubmit}
-                    disabled={!apiKey}
+                    disabled={!apiKey || configLoading}
                     className="w-full btn-hongbao text-white py-7 rounded-[32px] font-black text-xl hover:shadow-[0_0_60px_rgba(230,0,0,0.4)] transition-all disabled:opacity-20 flex items-center justify-center gap-4 active:scale-95 border border-white/10"
                   >
-                    <Zap size={28} className="fill-current" />
-                    保存设置
+                    {configLoading ? (
+                      <>
+                        <Loader2 size={28} className="animate-spin" />
+                        配置中...
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={28} className="fill-current" />
+                        保存设置
+                      </>
+                    )}
                   </button>
                   <p><a href="https://openrouter.ai" target="_blank" className="text-[10px] text-gray-500 hover:text-cny-gold underline uppercase font-black tracking-widest transition-colors">获取 Access Token</a></p>
                 </div>
