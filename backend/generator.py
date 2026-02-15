@@ -1,12 +1,14 @@
-from openai import OpenAI
+from openai import OpenAI, AuthenticationError, RateLimitError, APIError, APITimeoutError
 import os
 import re
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Generator:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        # OpenRouter configuration
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
@@ -104,12 +106,28 @@ class Generator:
                 "options": ["是的，想提一下", "不太需要", "让我想想", "跳过这个"],
                 "is_final": False
             }
-        except Exception as e:
-            print(f"[AI Deep Question Error] {e}")
-            # On error: if we have enough data, just generate
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.warning(f"[AI Deep Question Parse Error] {e}", exc_info=True)
             if deep_count >= 3:
                 return {"question": "", "options": [], "is_final": True}
-            # Otherwise give a safe fallback question
+            return {
+                "question": f"在新春之际，关于{contact_name}，还有什么想补充的吗？",
+                "options": ["补充一些细节", "差不多了，开始生成吧"],
+                "is_final": False
+            }
+        except (AuthenticationError, RateLimitError, APIError, APITimeoutError) as e:
+            logger.error(f"[AI API Error in get_next_question] {e.__class__.__name__}: {e}")
+            if deep_count >= 3:
+                return {"question": "", "options": [], "is_final": True}
+            return {
+                "question": f"在新春之际，关于{contact_name}，还有什么想补充的吗？",
+                "options": ["补充一些细节", "差不多了，开始生成吧"],
+                "is_final": False
+            }
+        except Exception as e:
+            logger.error(f"[Unexpected Error in get_next_question] {e}", exc_info=True)
+            if deep_count >= 3:
+                return {"question": "", "options": [], "is_final": True}
             return {
                 "question": f"在新春之际，关于{contact_name}，还有什么想补充的吗？",
                 "options": ["补充一些细节", "差不多了，开始生成吧"],
@@ -140,8 +158,12 @@ class Generator:
                 temperature=0.8
             )
             return response.choices[0].message.content.strip()
+        except (AuthenticationError, RateLimitError, APIError, APITimeoutError) as e:
+            logger.error(f"[AI API Error in generate_final_greeting] {e.__class__.__name__}: {e}")
+            return "生成失败，请检查 API Key 或稍后重试"
         except Exception as e:
-            return f"生成失败: {str(e)}"
+            logger.error(f"[Unexpected Error in generate_final_greeting] {e}", exc_info=True)
+            return "生成失败，请稍后重试"
 
     def _format_history(self, history: list) -> str:
         if not history:
@@ -156,9 +178,19 @@ class Generator:
         # Legacy compatibility
         return self.generate_final_greeting(contact_name, [{"question": "基础信息", "answer": str(answers)}], model)
 
-    def validate_key(self) -> bool:
+    def validate_key(self) -> tuple[bool, str]:
         try:
             self.client.models.list()
-            return True
-        except:
-            return False
+            return True, "API Key valid"
+        except AuthenticationError:
+            logger.warning("API Key authentication failed")
+            return False, "Invalid API Key"
+        except RateLimitError:
+            logger.warning("API rate limit exceeded during validation")
+            return False, "Rate limit exceeded"
+        except (APIError, APITimeoutError) as e:
+            logger.warning(f"API error during validation: {e}")
+            return False, "API service unavailable"
+        except Exception as e:
+            logger.error(f"Unexpected error during key validation: {e}", exc_info=True)
+            return False, "Validation failed"

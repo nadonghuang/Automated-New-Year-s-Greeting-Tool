@@ -10,6 +10,7 @@ import ContactSourceSelector from "@/components/ContactSourceSelector";
 import ContactList from "@/components/ContactList";
 import Questionnaire from "@/components/Questionnaire";
 import GreetingReview from "@/components/GreetingReview";
+import AddContactModal from "@/components/AddContactModal";
 import { cn, API_BASE_URL } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -23,6 +24,12 @@ interface Contact {
   signature?: string;
 }
 
+interface LastAnswers {
+  basic: Array<{ question: string; answer: string }>;
+  deep: Array<{ question: string; answer: string }>;
+  timestamp: number;
+}
+
 export default function Home() {
   const [mode, setMode] = useState<'scan' | 'manual'>('manual');
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -34,31 +41,46 @@ export default function Home() {
   const [generatedGreeting, setGeneratedGreeting] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [showConfig, setShowConfig] = useState(true);
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
 
   // Temporary answers storage for regeneration
-  const [lastAnswers, setLastAnswers] = useState<any>(null);
+  const [lastAnswers, setLastAnswers] = useState<LastAnswers | null>(null);
 
   // Generate stable random particles on client side only
   const [goldParticles, setGoldParticles] = useState<Array<{id: number, left: number, duration: number, delay: number, opacity: number}>>([]);
 
   // Load initial state
   useEffect(() => {
-    const savedContacts = localStorage.getItem("wechat_contacts");
-    if (savedContacts) {
+    const loadInitialState = () => {
       try {
-        setContacts(JSON.parse(savedContacts));
-      } catch (e) { }
-    }
+        const savedContacts = localStorage.getItem("wechat_contacts");
+        if (savedContacts) {
+          try {
+            const parsed = JSON.parse(savedContacts);
+            if (Array.isArray(parsed)) {
+              setContacts(parsed);
+            }
+          } catch (e) {
+            console.error('Failed to parse saved contacts:', e);
+            toast.error('无法加载已保存的联系人数据');
+          }
+        }
 
-    const savedKey = localStorage.getItem("wechat_api_key");
-    if (savedKey) {
-      setApiKey(savedKey);
-      setShowConfig(false);
-      // Auto config backend
-      axios.post(`${API_BASE_URL}/config`, { api_key: savedKey }).catch(() => {
-        setShowConfig(true);
-      });
-    }
+        const savedKey = localStorage.getItem("wechat_api_key");
+        if (savedKey) {
+          setApiKey(savedKey);
+          setShowConfig(false);
+          // Auto config backend
+          axios.post(`${API_BASE_URL}/config`, { api_key: savedKey }).catch(() => {
+            setShowConfig(true);
+          });
+        }
+      } catch (e) {
+        console.error('localStorage not available:', e);
+      }
+    };
+
+    loadInitialState();
 
     // Generate stable gold particles on client side
     const particles = [...Array(20)].map((_, i) => ({
@@ -73,7 +95,12 @@ export default function Home() {
 
   // Save contacts on change
   useEffect(() => {
-    localStorage.setItem("wechat_contacts", JSON.stringify(contacts));
+    try {
+      localStorage.setItem("wechat_contacts", JSON.stringify(contacts));
+    } catch (e) {
+      console.error('Failed to save contacts to localStorage:', e);
+      toast.error('无法保存联系人数据到本地存储');
+    }
   }, [contacts]);
 
   const handleContactsLoaded = (newContacts: Contact[]) => {
@@ -82,6 +109,25 @@ export default function Home() {
       const combined = [...prev, ...newContacts];
       const unique = Array.from(new Map(combined.map(item => [item.name, item])).values());
       return unique;
+    });
+  };
+
+  const handleAddContact = (name: string, remark?: string) => {
+    setContacts(prev => {
+      const exists = prev.some(c => c.name === name);
+      if (exists) {
+        toast.error(`好友 "${name}" 已存在`);
+        return prev;
+      }
+      const newContact: Contact = {
+        id: `manual_${Date.now()}`,
+        name,
+        nickname: name,
+        remark: remark || "",
+        city: ""
+      };
+      toast.success(`已添加好友 "${name}"`);
+      return [...prev, newContact];
     });
   };
 
@@ -186,7 +232,7 @@ export default function Home() {
             <div className="relative">
               <div className="absolute inset-0 bg-cny-gold blur-2xl opacity-0 group-hover:opacity-40 transition-opacity duration-500" />
               <div className="w-16 h-16 bg-gradient-to-br from-cny-red to-red-800 rounded-2xl flex items-center justify-center text-cny-gold shadow-2xl group-hover:rotate-[360deg] transition-transform duration-1000 relative z-10 border border-cny-gold/20">
-                <Sparkles className="w-9 h-9 neo-text-gold" />
+                <span className="text-3xl font-black neo-text-gold">福</span>
               </div>
             </div>
             <div>
@@ -279,6 +325,7 @@ export default function Home() {
                 <ContactList
                   contacts={contacts}
                   onSelect={handleSelectContact}
+                  onAddContact={() => setShowAddContactModal(true)}
                 />
               </div>
 
@@ -433,6 +480,13 @@ export default function Home() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Add Contact Modal */}
+      <AddContactModal
+        isOpen={showAddContactModal}
+        onClose={() => setShowAddContactModal(false)}
+        onAdd={handleAddContact}
+      />
 
       {/* Footer */}
       <footer className="relative z-10 py-12 px-6 text-center opacity-30">

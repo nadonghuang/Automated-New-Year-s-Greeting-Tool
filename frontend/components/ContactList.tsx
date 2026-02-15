@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, User, Sparkles, CheckCircle2, ChevronRight, X } from "lucide-react";
+import { Search, User, Sparkles, CheckCircle2, ChevronRight, X, UserPlus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,11 @@ interface Contact {
     signature?: string;
 }
 
-export default function ContactList({ contacts, onSelect }: { contacts: Contact[], onSelect: (contact: Contact) => void }) {
+export default function ContactList({ contacts, onSelect, onAddContact }: { 
+    contacts: Contact[], 
+    onSelect: (contact: Contact) => void,
+    onAddContact?: () => void
+}) {
     const [search, setSearch] = useState("");
 
     const filtered = contacts.filter(c =>
@@ -46,6 +50,15 @@ export default function ContactList({ contacts, onSelect }: { contacts: Contact[
                             共计 {contacts.length} 位联系人
                         </p>
                     </div>
+                    {onAddContact && (
+                        <button
+                            onClick={onAddContact}
+                            className="w-10 h-10 rounded-xl bg-gradient-to-br from-cny-red to-red-950 flex items-center justify-center text-cny-gold hover:scale-105 transition-transform shadow-lg border border-cny-gold/20"
+                            title="添加好友"
+                        >
+                            <UserPlus size={18} />
+                        </button>
+                    )}
                 </div>
 
                 <div className="relative group/search">

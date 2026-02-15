@@ -8,3 +8,5 @@ openpyxl
 qrcode
 Pillow
 pycryptodome
+slowapi
+itsdangerous
