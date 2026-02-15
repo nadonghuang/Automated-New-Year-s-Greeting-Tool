@@ -11,6 +11,9 @@ import ContactList from "@/components/ContactList";
 import Questionnaire from "@/components/Questionnaire";
 import GreetingReview from "@/components/GreetingReview";
 import AddContactModal from "@/components/AddContactModal";
+import EditContactModal from "@/components/EditContactModal";
+import FileUpload from "@/components/FileUpload";
+import TaskTabs, { Task, TaskStep } from "@/components/TaskTabs";
 import { cn, API_BASE_URL } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -31,7 +34,7 @@ interface LastAnswers {
 }
 
 export default function Home() {
-  const [mode, setMode] = useState<'scan' | 'manual'>('manual');
+  const [mode, setMode] = useState<'scan' | 'manual' | 'file'>('manual');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
 
@@ -42,6 +45,14 @@ export default function Home() {
   const [apiKey, setApiKey] = useState("");
   const [showConfig, setShowConfig] = useState(true);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [showEditContactModal, setShowEditContactModal] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [deletedContacts, setDeletedContacts] = useState<Contact[]>([]);
+  const [defaultModel, setDefaultModel] = useState("deepseek/deepseek-v3.2");
+
+  // Multi-task state
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
 
   // Temporary answers storage for regeneration
   const [lastAnswers, setLastAnswers] = useState<LastAnswers | null>(null);
@@ -74,6 +85,11 @@ export default function Home() {
           axios.post(`${API_BASE_URL}/config`, { api_key: savedKey }).catch(() => {
             setShowConfig(true);
           });
+        }
+
+        const savedModel = localStorage.getItem("wechat_default_model");
+        if (savedModel) {
+          setDefaultModel(savedModel);
         }
       } catch (e) {
         console.error('localStorage not available:', e);
@@ -131,6 +147,41 @@ export default function Home() {
     });
   };
 
+  const handleEditContact = (contact: Contact) => {
+    setEditingContact(contact);
+    setShowEditContactModal(true);
+  };
+
+  const handleSaveEditContact = (updatedContact: Contact) => {
+    setContacts(prev => prev.map(c => c.id === updatedContact.id ? updatedContact : c));
+    toast.success(`已更新好友 "${updatedContact.name}"`);
+  };
+
+  const handleDeleteContact = (contact: Contact) => {
+    setContacts(prev => prev.filter(c => c.id !== contact.id));
+    setDeletedContacts(prev => [...prev, contact]);
+    toast(
+      `已删除好友 "${contact.name}"`,
+      {
+        action: {
+          label: "撤销",
+          onClick: () => handleUndoDelete(contact)
+        },
+        duration: 5000
+      }
+    );
+  };
+
+  const handleUndoDelete = (contact: Contact) => {
+    setContacts(prev => {
+      const exists = prev.some(c => c.id === contact.id);
+      if (exists) return prev;
+      return [...prev, contact];
+    });
+    setDeletedContacts(prev => prev.filter(c => c.id !== contact.id));
+    toast.success(`已恢复好友 "${contact.name}"`);
+  };
+
   const handleConfigSubmit = async () => {
     try {
       await axios.post(`${API_BASE_URL}/config`, { api_key: apiKey });
@@ -147,6 +198,12 @@ export default function Home() {
     setGeneratedGreeting(greeting);
     setShowQuestionnaire(false);
     setShowReview(true);
+    
+    handleUpdateTask(selectedContact.id, { step: "review", greeting });
+    
+    setContacts(prev => prev.map(c => 
+      c.id === selectedContact.id ? { ...c, greeting } : c
+    ));
   };
 
   const handleExport = async () => {
@@ -173,15 +230,43 @@ export default function Home() {
   const handleSaveGreeting = (text: string) => {
     if (!selectedContact) return;
     setContacts(contacts.map(c => c.id === selectedContact.id ? { ...c, greeting: text } : c));
+    handleUpdateTask(selectedContact.id, { step: "done", greeting: text });
     setShowReview(false);
-    setSelectedContact(null);
+    handleRemoveTask(selectedContact.id);
   };
 
   const handleSelectContact = (contact: Contact) => {
     setSelectedContact(contact);
+    
+    const existingTask = tasks.find(t => t.contactId === contact.id);
+    if (existingTask) {
+      setActiveTaskId(contact.id);
+      if (existingTask.greeting) {
+        setGeneratedGreeting(existingTask.greeting);
+        setShowReview(true);
+        setShowQuestionnaire(false);
+      } else {
+        setShowQuestionnaire(true);
+        setShowReview(false);
+      }
+      return;
+    }
+
+    const newTask: Task = {
+      contactId: contact.id,
+      contactName: contact.name,
+      step: contact.greeting ? "review" : (defaultModel ? "basic" : "model"),
+      history: [],
+      basicIndex: 0,
+      aiQuestionCount: 0,
+      selectedModel: defaultModel || "",
+      greeting: contact.greeting
+    };
+    
+    setTasks(prev => [...prev, newTask]);
+    setActiveTaskId(contact.id);
+
     if (contact.greeting) {
-      // If already has greeting, show review directly? or ask?
-      // Let's show review directly with option to redo
       setGeneratedGreeting(contact.greeting);
       setShowReview(true);
       setShowQuestionnaire(false);
@@ -189,6 +274,46 @@ export default function Home() {
       setShowQuestionnaire(true);
       setShowReview(false);
     }
+  };
+
+  const handleSelectTask = (taskId: string) => {
+    const task = tasks.find(t => t.contactId === taskId);
+    if (!task) return;
+
+    const contact = contacts.find(c => c.id === taskId);
+    if (contact) {
+      setSelectedContact(contact);
+    }
+    
+    setActiveTaskId(taskId);
+    
+    if (task.greeting) {
+      setGeneratedGreeting(task.greeting);
+      setShowReview(true);
+      setShowQuestionnaire(false);
+    } else {
+      setShowQuestionnaire(true);
+      setShowReview(false);
+    }
+  };
+
+  const handleRemoveTask = (taskId: string) => {
+    setTasks(prev => prev.filter(t => t.contactId !== taskId));
+    if (activeTaskId === taskId) {
+      const remaining = tasks.filter(t => t.contactId !== taskId);
+      if (remaining.length > 0) {
+        handleSelectTask(remaining[0].contactId);
+      } else {
+        setActiveTaskId(null);
+        setSelectedContact(null);
+        setShowQuestionnaire(false);
+        setShowReview(false);
+      }
+    }
+  };
+
+  const handleUpdateTask = (taskId: string, updates: Partial<Task>) => {
+    setTasks(prev => prev.map(t => t.contactId === taskId ? { ...t, ...updates } : t));
   };
 
   return (
@@ -304,10 +429,16 @@ export default function Home() {
                       <div className="text-sm text-gray-300">扫码登录受微信安全策略限制。若无法接入，请尝试“智能录入”。</div>
                     </div>
                   </div>
-                ) : (
+                ) : mode === 'manual' ? (
                   <div className="space-y-6">
                     <div className="glass-tech p-1 rounded-[40px] corner-motif">
                       <ManualInput onParsed={handleContactsLoaded} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="glass-tech p-1 rounded-[40px] corner-motif">
+                      <FileUpload onParsed={handleContactsLoaded} />
                     </div>
                   </div>
                 )}
@@ -326,11 +457,21 @@ export default function Home() {
                   contacts={contacts}
                   onSelect={handleSelectContact}
                   onAddContact={() => setShowAddContactModal(true)}
+                  onEdit={handleEditContact}
+                  onDelete={handleDeleteContact}
                 />
               </div>
 
               {/* Right Side: The Unified Workflow Container */}
               <div className="flex-1 flex flex-col glass-tech rounded-[40px] border border-white/10 shadow-3xl overflow-hidden relative corner-motif">
+                {/* Task Tabs for Multi-tasking */}
+                <TaskTabs
+                  tasks={tasks}
+                  activeTaskId={activeTaskId}
+                  onSelectTask={handleSelectTask}
+                  onRemoveTask={handleRemoveTask}
+                />
+                
                 {/* Background Watermark */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none">
                   <span className="text-[40rem] font-black text-white leading-none">马</span>
@@ -378,12 +519,32 @@ export default function Home() {
                       />
                     ) : (
                       <Questionnaire
-                        key="questionnaire"
+                        key={`questionnaire-${selectedContact.id}`}
                         contactName={selectedContact.name}
+                        contactId={selectedContact.id}
+                        defaultModel={defaultModel}
+                        initialState={(() => {
+                          const task = tasks.find(t => t.contactId === selectedContact.id);
+                          if (!task) return undefined;
+                          if (task.step === "review" || task.step === "done") return undefined;
+                          return {
+                            step: task.step as "model" | "basic" | "ai_deep" | "generating",
+                            selectedModel: task.selectedModel,
+                            history: task.history,
+                            basicIndex: task.basicIndex,
+                            aiQuestionCount: task.aiQuestionCount,
+                            currentAIQuestion: task.currentAIQuestion
+                          };
+                        })()}
                         onSubmit={handleGenerateComplete}
                         onCancel={() => {
-                          setShowQuestionnaire(false);
-                          setSelectedContact(null);
+                          handleRemoveTask(selectedContact.id);
+                        }}
+                        onStepChange={(step, data) => {
+                          handleUpdateTask(selectedContact.id, { 
+                            step,
+                            ...data 
+                          });
                         }}
                       />
                     )}
@@ -449,11 +610,11 @@ export default function Home() {
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cny-red/20 rounded-full blur-[120px] pointer-events-none" />
               <div className="relative z-10 text-center">
                 <div className="w-24 h-24 bg-gradient-to-br from-cny-red to-red-950 rounded-3xl flex items-center justify-center mb-10 shadow-3xl border border-cny-gold/20 mx-auto">
-                  <Zap className="w-12 h-12 text-cny-gold" />
+                  <Settings className="w-12 h-12 text-cny-gold" />
                 </div>
-                <h2 className="text-4xl font-black mb-3 text-white tracking-tighter">系统授权</h2>
+                <h2 className="text-4xl font-black mb-3 text-white tracking-tighter">系统设置</h2>
                 <p className="text-sm text-gray-400 mb-10 leading-relaxed opacity-70">
-                  请输入 OpenRouter API 密钥以激活贺岁量子算法。<br />密钥将安全存储于本地。
+                  配置 API 密钥和默认模型。<br />设置将安全存储于本地。
                 </p>
                 <div className="space-y-6">
                   <div className="space-y-3 text-left">
@@ -466,13 +627,34 @@ export default function Home() {
                       placeholder="sk-or-v1-..."
                     />
                   </div>
+                  <div className="space-y-3 text-left">
+                    <label className="text-[10px] font-black text-cny-gold uppercase tracking-[0.4em] pl-1">默认模型</label>
+                    <select
+                      value={defaultModel}
+                      onChange={(e) => {
+                        setDefaultModel(e.target.value);
+                        localStorage.setItem("wechat_default_model", e.target.value);
+                      }}
+                      className="w-full p-6 rounded-3xl bg-black/60 border-2 border-white/10 focus:border-cny-gold focus:bg-white/5 outline-none transition-all text-sm text-white appearance-none cursor-pointer"
+                    >
+                      <option value="deepseek/deepseek-v3.2">DeepSeek V3.2 (推荐)</option>
+                      <option value="deepseek/deepseek-r1">DeepSeek R1 (推理)</option>
+                      <option value="openai/gpt-5.2">GPT-5.2 (全能)</option>
+                      <option value="openai/gpt-5-nano">GPT-5 Nano (疾速)</option>
+                      <option value="anthropic/claude-opus-4.6">Claude Opus 4.6</option>
+                      <option value="google/gemini-3-pro-preview">Gemini 3 Pro Preview</option>
+                      <option value="google/gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+                      <option value="qwen/qwen3-max">Qwen3 Max</option>
+                    </select>
+                    <p className="text-[10px] text-gray-500 pl-1">生成祝福时将跳过模型选择，直接使用此模型</p>
+                  </div>
                   <button
                     onClick={handleConfigSubmit}
                     disabled={!apiKey}
                     className="w-full btn-hongbao text-white py-7 rounded-[32px] font-black text-xl hover:shadow-[0_0_60px_rgba(230,0,0,0.4)] transition-all disabled:opacity-20 flex items-center justify-center gap-4 active:scale-95 border border-white/10"
                   >
                     <Zap size={28} className="fill-current" />
-                    激活全息助手
+                    保存设置
                   </button>
                   <p><a href="https://openrouter.ai" target="_blank" className="text-[10px] text-gray-500 hover:text-cny-gold underline uppercase font-black tracking-widest transition-colors">获取 Access Token</a></p>
                 </div>
@@ -487,6 +669,17 @@ export default function Home() {
         isOpen={showAddContactModal}
         onClose={() => setShowAddContactModal(false)}
         onAdd={handleAddContact}
+      />
+
+      {/* Edit Contact Modal */}
+      <EditContactModal
+        isOpen={showEditContactModal}
+        onClose={() => {
+          setShowEditContactModal(false);
+          setEditingContact(null);
+        }}
+        onSave={handleSaveEditContact}
+        contact={editingContact}
       />
 
       {/* Footer */}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, User, Sparkles, CheckCircle2, ChevronRight, X, UserPlus } from "lucide-react";
+import { Search, User, Sparkles, CheckCircle2, ChevronRight, X, UserPlus, Pencil, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -15,10 +15,18 @@ interface Contact {
     signature?: string;
 }
 
-export default function ContactList({ contacts, onSelect, onAddContact }: { 
+export default function ContactList({ 
+    contacts, 
+    onSelect, 
+    onAddContact,
+    onEdit,
+    onDelete
+}: { 
     contacts: Contact[], 
     onSelect: (contact: Contact) => void,
-    onAddContact?: () => void
+    onAddContact?: () => void,
+    onEdit?: (contact: Contact) => void,
+    onDelete?: (contact: Contact) => void
 }) {
     const [search, setSearch] = useState("");
 
@@ -26,7 +34,6 @@ export default function ContactList({ contacts, onSelect, onAddContact }: {
         c.name.includes(search) || (c.nickname && c.nickname.includes(search)) || (c.remark && c.remark.includes(search))
     );
 
-    // Festive avatar gradient logic
     const getAvatarColor = (name: string) => {
         const colors = [
             'from-cny-red/80 to-red-950',
@@ -37,6 +44,16 @@ export default function ContactList({ contacts, onSelect, onAddContact }: {
         ];
         const index = name.charCodeAt(0) % colors.length;
         return colors[index];
+    };
+
+    const handleEdit = (e: React.MouseEvent, contact: Contact) => {
+        e.stopPropagation();
+        onEdit?.(contact);
+    };
+
+    const handleDelete = (e: React.MouseEvent, contact: Contact) => {
+        e.stopPropagation();
+        onDelete?.(contact);
     };
 
     return (
@@ -82,19 +99,19 @@ export default function ContactList({ contacts, onSelect, onAddContact }: {
             <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
                 <AnimatePresence mode="popLayout">
                     {filtered.map((contact, idx) => (
-                        <motion.button
+                        <motion.div
                             key={contact.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.98 }}
                             transition={{ delay: idx * 0.01 }}
-                            onClick={() => onSelect(contact)}
                             className={cn(
-                                "w-full flex items-center gap-4 p-4 rounded-2xl transition-all group text-left relative overflow-hidden active:scale-[0.99]",
+                                "w-full flex items-center gap-4 p-4 rounded-2xl transition-all group text-left relative overflow-hidden cursor-pointer active:scale-[0.99]",
                                 contact.greeting
                                     ? "bg-cny-red/[0.04] border border-cny-red/10 hover:bg-cny-red/[0.08]"
                                     : "bg-white/[0.01] border border-white/5 hover:border-white/10 hover:bg-white/[0.03]"
                             )}
+                            onClick={() => onSelect(contact)}
                         >
                             {/* Avatar */}
                             <div className={cn(
@@ -117,8 +134,27 @@ export default function ContactList({ contacts, onSelect, onAddContact }: {
                                 </p>
                             </div>
 
-                            {/* Status Indicator */}
-                            <div className="shrink-0 relative z-10">
+                            {/* Action Buttons */}
+                            <div className="shrink-0 relative z-10 flex items-center gap-1">
+                                {onEdit && (
+                                    <button
+                                        onClick={(e) => handleEdit(e, contact)}
+                                        className="w-7 h-7 rounded-lg bg-white/[0.02] flex items-center justify-center text-gray-600 hover:bg-cny-gold/20 hover:text-cny-gold transition-all border border-white/5 opacity-0 group-hover:opacity-100"
+                                        title="编辑"
+                                    >
+                                        <Pencil size={12} />
+                                    </button>
+                                )}
+                                {onDelete && (
+                                    <button
+                                        onClick={(e) => handleDelete(e, contact)}
+                                        className="w-7 h-7 rounded-lg bg-white/[0.02] flex items-center justify-center text-gray-600 hover:bg-red-500/20 hover:text-red-400 transition-all border border-white/5 opacity-0 group-hover:opacity-100"
+                                        title="删除"
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                )}
+                                
                                 {contact.greeting ? (
                                     <div className="w-7 h-7 rounded-lg bg-green-500/10 flex items-center justify-center text-green-400/60 border border-green-500/20">
                                         <CheckCircle2 size={14} />
@@ -129,7 +165,7 @@ export default function ContactList({ contacts, onSelect, onAddContact }: {
                                     </div>
                                 )}
                             </div>
-                        </motion.button>
+                        </motion.div>
                     ))}
                 </AnimatePresence>
 

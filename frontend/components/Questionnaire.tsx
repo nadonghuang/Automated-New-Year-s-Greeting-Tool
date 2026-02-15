@@ -1,15 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, PenTool, MessageCircle, Wand2, X, BrainCircuit, Loader2, Sparkles } from "lucide-react";
 import { cn, API_BASE_URL } from "@/lib/utils";
 import axios from "axios";
 import { toast } from "sonner";
+import { TaskStep } from "./TaskTabs";
 
 interface HistoryEntry {
     question: string;
     answer: string;
+}
+
+type QuestionnaireStep = "model" | "basic" | "ai_deep" | "generating";
+
+interface InitialState {
+    step?: QuestionnaireStep;
+    selectedModel?: string;
+    history?: HistoryEntry[];
+    basicIndex?: number;
+    aiQuestionCount?: number;
+    currentAIQuestion?: { question: string; options: string[] } | null;
 }
 
 const MODELS = [
@@ -71,30 +83,95 @@ const BASIC_QUESTIONS = [
     }
 ];
 
-export default function Questionnaire({ contactName, onSubmit, onCancel }: { contactName: string, onSubmit: (greeting: string) => void, onCancel: () => void }) {
-    const [step, setStep] = useState<"model" | "basic" | "ai_deep" | "generating">("model");
-    const [selectedModel, setSelectedModel] = useState("deepseek/deepseek-chat");
+export default function Questionnaire({ 
+    contactName, 
+    onSubmit, 
+    onCancel,
+    onStepChange,
+    initialState,
+    contactId,
+    defaultModel
+}: { 
+    contactName: string, 
+    onSubmit: (greeting: string) => void, 
+    onCancel: () => void,
+    onStepChange?: (step: TaskStep, data?: { basicIndex?: number; history?: HistoryEntry[]; selectedModel?: string; aiQuestionCount?: number; greeting?: string; currentAIQuestion?: { question: string; options: string[] } | null }) => void,
+    initialState?: InitialState,
+    contactId?: string,
+    defaultModel?: string
+}) {
+    const hasDefaultModel = !!defaultModel;
+    const initialStep = initialState?.step || (hasDefaultModel ? "basic" : "model");
+    const [step, setStep] = useState<"model" | "basic" | "ai_deep" | "generating">(initialStep);
+    const [selectedModel, setSelectedModel] = useState(initialState?.selectedModel || defaultModel || "deepseek/deepseek-v3.2");
 
     // All answers collected
-    const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [history, setHistory] = useState<HistoryEntry[]>(initialState?.history || []);
 
     // Basic question index (0-4)
-    const [basicIndex, setBasicIndex] = useState(0);
+    const [basicIndex, setBasicIndex] = useState(initialState?.basicIndex || 0);
 
     // AI deep question
     const [currentAIQuestion, setCurrentAIQuestion] = useState<{ question: string, options: string[] } | null>(null);
     const [loadingQuestion, setLoadingQuestion] = useState(false);
-    const [aiQuestionCount, setAiQuestionCount] = useState(0);
+    const [aiQuestionCount, setAiQuestionCount] = useState(initialState?.aiQuestionCount || 0);
 
     // Custom input
     const [customAnswer, setCustomAnswer] = useState("");
     const [showCustom, setShowCustom] = useState(false);
+
+    // Auto-start with default model
+    useEffect(() => {
+        if (hasDefaultModel && !initialState?.step && step === "model") {
+            setStep("basic");
+            setBasicIndex(0);
+        }
+    }, []);
+
+    // Restore state when switching tasks
+    useEffect(() => {
+        setCurrentAIQuestion(null);
+        setLoadingQuestion(false);
+        
+        if (initialState) {
+            if (initialState.step) setStep(initialState.step);
+            else setStep(hasDefaultModel ? "basic" : "model");
+            
+            if (initialState.selectedModel) setSelectedModel(initialState.selectedModel);
+            else setSelectedModel(defaultModel || "deepseek/deepseek-v3.2");
+            
+            if (initialState.history !== undefined) setHistory(initialState.history);
+            else setHistory([]);
+            
+            if (initialState.basicIndex !== undefined) setBasicIndex(initialState.basicIndex);
+            else setBasicIndex(0);
+            
+            if (initialState.aiQuestionCount !== undefined) setAiQuestionCount(initialState.aiQuestionCount);
+            else setAiQuestionCount(0);
+            
+            // Restore saved AI question if available, otherwise fetch new one
+            if (initialState.step === "ai_deep" && initialState.selectedModel) {
+                if (initialState.currentAIQuestion) {
+                    setCurrentAIQuestion(initialState.currentAIQuestion);
+                } else if (initialState.history && initialState.history.length > 0) {
+                    fetchAIQuestion(initialState.selectedModel, initialState.history);
+                }
+            }
+        } else {
+            setStep(hasDefaultModel ? "basic" : "model");
+            setSelectedModel(defaultModel || "deepseek/deepseek-v3.2");
+            setHistory([]);
+            setBasicIndex(0);
+            setAiQuestionCount(0);
+        }
+    }, [contactId, initialState?.step]);
 
     // ========== Step 1: Choose model, then go to basic ==========
     const startInterview = (modelId: string) => {
         setSelectedModel(modelId);
         setStep("basic");
         setBasicIndex(0);
+        onStepChange?.("basic", { selectedModel: modelId, basicIndex: 0 });
     };
 
     // ========== Step 2: Handle basic question answers (local, no API) ==========
@@ -107,10 +184,13 @@ export default function Questionnaire({ contactName, onSubmit, onCancel }: { con
 
         if (basicIndex + 1 < BASIC_QUESTIONS.length) {
             // Next basic question
-            setBasicIndex(basicIndex + 1);
+            const nextIndex = basicIndex + 1;
+            setBasicIndex(nextIndex);
+            onStepChange?.("basic", { basicIndex: nextIndex, history: newHistory, selectedModel });
         } else {
             // All 10 basic done -> enter AI deep phase
             setStep("ai_deep");
+            onStepChange?.("ai_deep", { history: newHistory, selectedModel, aiQuestionCount: 0 });
             fetchAIQuestion(selectedModel, newHistory);
         }
     };
@@ -130,13 +210,21 @@ export default function Questionnaire({ contactName, onSubmit, onCancel }: { con
                 // AI says enough info, generate!
                 generateGreeting(modelId, currentHistory);
             } else {
-                setCurrentAIQuestion({
+                const newQuestion = {
                     question: res.data.question,
                     options: res.data.options || []
-                });
-                setAiQuestionCount(prev => prev + 1);
+                };
+                setCurrentAIQuestion(newQuestion);
+                const newCount = aiQuestionCount + 1;
+                setAiQuestionCount(newCount);
                 setShowCustom(false);
                 setCustomAnswer("");
+                onStepChange?.("ai_deep", { 
+                    history: currentHistory, 
+                    selectedModel: modelId, 
+                    aiQuestionCount: newCount,
+                    currentAIQuestion: newQuestion
+                });
             }
         } catch (e: any) {
             console.error("AI question error:", e);
@@ -156,20 +244,26 @@ export default function Questionnaire({ contactName, onSubmit, onCancel }: { con
         if (!currentAIQuestion) return;
         const newHistory = [...history, { question: currentAIQuestion.question, answer }];
         setHistory(newHistory);
+        const newCount = aiQuestionCount + 1;
+        setAiQuestionCount(newCount);
         setShowCustom(false);
         setCustomAnswer("");
+        setCurrentAIQuestion(null);
+        onStepChange?.("ai_deep", { history: newHistory, selectedModel, aiQuestionCount: newCount, currentAIQuestion: null });
         fetchAIQuestion(selectedModel, newHistory);
     };
 
     // ========== Step 4: Generate final greeting ==========
     const generateGreeting = async (modelId: string, finalHistory: HistoryEntry[]) => {
         setStep("generating");
+        onStepChange?.("generating", { history: finalHistory, selectedModel: modelId });
         try {
             const res = await axios.post(`${API_BASE_URL}/generate/final`, {
                 contact_name: contactName,
                 history: finalHistory,
                 model: modelId
             });
+            onStepChange?.("review", { greeting: res.data.greeting, history: finalHistory, selectedModel: modelId });
             onSubmit(res.data.greeting);
         } catch (e) {
             toast.error("生成最终祝福时出错，请检查网络");

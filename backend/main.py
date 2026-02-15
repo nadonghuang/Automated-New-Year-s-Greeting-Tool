@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
@@ -126,13 +126,19 @@ def get_final_greeting(req: FinalGreetingRequest, request: Request):
 @app.post("/contacts/export")
 @limiter.limit("10/minute")
 def export_contacts(req: ExportRequest, request: Request):
-    df = pd.DataFrame(req.contacts)
-    cols = ["name", "nickname", "greeting"]
-    available_cols = [c for c in cols if c in df.columns]
-    data_to_export = df[available_cols] if not df.empty else df
+    contacts_data = []
+    for c in req.contacts:
+        contacts_data.append({
+            "name": c.get("name", ""),
+            "nickname": c.get("nickname", ""),
+            "remark": c.get("remark", ""),
+            "greeting": c.get("greeting", "")
+        })
+    
+    df = pd.DataFrame(contacts_data)
     
     filename = "wechat_greetings_export.csv"
-    data_to_export.to_csv(filename, index=False, encoding='utf-8-sig')
+    df.to_csv(filename, index=False, encoding='utf-8-sig')
     
     from fastapi.responses import FileResponse
     return FileResponse(filename, filename=filename, media_type='text/csv')
@@ -160,14 +166,103 @@ def parse_manual(req: ManualInputRequest, request: Request):
     lines = [line.strip() for line in text.split('\n') if line.strip()]
 
     contacts = []
-    for i, name in enumerate(lines[:100]):
+    for i, line in enumerate(lines[:100]):
+        parts = re.split(r'[\s:：,，]+', line, maxsplit=1)
+        name = parts[0]
+        remark = parts[1] if len(parts) > 1 else ""
         contacts.append({
             "id": f"manual_{i}",
             "name": name,
             "nickname": name,
-            "remark": "",
+            "remark": remark,
             "city": ""
         })
+    return {"count": len(contacts), "friends": contacts}
+
+@app.post("/contacts/parse_file")
+@limiter.limit("10/minute")
+async def parse_file(request: Request, file: UploadFile = File(...)):
+    import io
+    
+    filename = file.filename or ""
+    content = await file.read()
+    
+    contacts = []
+    header_keywords = ['name', 'nickname', '姓名', '名字', 'remark', '备注', 'greeting', '祝福']
+    
+    def is_header_row(first_cell: str) -> bool:
+        if not first_cell:
+            return False
+        first_lower = first_cell.lower().strip()
+        return any(kw in first_lower for kw in header_keywords)
+    
+    try:
+        if filename.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(io.BytesIO(content), header=None)
+            for i, row in df.iterrows():
+                if len(contacts) >= 500:
+                    break
+                name = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
+                if i == 0 and is_header_row(name):
+                    continue
+                if name and name.strip():
+                    remark = str(row.iloc[2]) if len(row) > 2 and pd.notna(row.iloc[2]) else ""
+                    greeting = str(row.iloc[3]) if len(row) > 3 and pd.notna(row.iloc[3]) else ""
+                    contacts.append({
+                        "id": f"excel_{i}",
+                        "name": name.strip(),
+                        "nickname": name.strip(),
+                        "remark": remark.strip() if remark else "",
+                        "greeting": greeting.strip() if greeting and greeting.strip().lower() != 'greeting' else "",
+                        "city": ""
+                    })
+        elif filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(content), header=None, encoding='utf-8-sig')
+            for i, row in df.iterrows():
+                if len(contacts) >= 500:
+                    break
+                name = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ""
+                if i == 0 and is_header_row(name):
+                    continue
+                if name and name.strip():
+                    remark = str(row.iloc[2]) if len(row) > 2 and pd.notna(row.iloc[2]) else ""
+                    greeting = str(row.iloc[3]) if len(row) > 3 and pd.notna(row.iloc[3]) else ""
+                    contacts.append({
+                        "id": f"csv_{i}",
+                        "name": name.strip(),
+                        "nickname": name.strip(),
+                        "remark": remark.strip() if remark else "",
+                        "greeting": greeting.strip() if greeting and greeting.strip().lower() != 'greeting' else "",
+                        "city": ""
+                    })
+        elif filename.endswith('.txt'):
+            text = content.decode('utf-8')
+            lines = [line.strip() for line in text.split('\n') if line.strip()]
+            for i, line in enumerate(lines[:500]):
+                if i == 0 and is_header_row(line):
+                    continue
+                parts = re.split(r'[\s:：,，\t]+', line, maxsplit=3)
+                name = parts[0] if len(parts) > 0 else ""
+                remark = parts[2] if len(parts) > 2 else ""
+                greeting = parts[3] if len(parts) > 3 else ""
+                if name:
+                    contacts.append({
+                        "id": f"txt_{i}",
+                        "name": name,
+                        "nickname": name,
+                        "remark": remark,
+                        "greeting": greeting if greeting and greeting.lower() != 'greeting' else "",
+                        "city": ""
+                    })
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"File parse error: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+    
     return {"count": len(contacts), "friends": contacts}
 
 @app.post("/generate")
