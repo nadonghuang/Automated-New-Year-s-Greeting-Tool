@@ -3,8 +3,15 @@ import os
 import re
 import json
 import logging
+import time
+import httpx
 
 logger = logging.getLogger(__name__)
+
+MAX_HISTORY_LENGTH = 20
+MAX_RETRIES = 3
+RETRY_DELAY = 1.0
+REQUEST_TIMEOUT = 60.0
 
 class Generator:
     def __init__(self, api_key: str):
@@ -12,28 +19,23 @@ class Generator:
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
+            timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=10.0)
         )
 
     def get_next_question(self, contact_name: str, history: list, model: str = "deepseek/deepseek-v3.2") -> dict:
-        """
-        Called ONLY after the 5 basic questions are done (handled by frontend).
-        This generates deep, diverse follow-up questions.
-        history already contains the 5 basic Q&A pairs + any previous deep Q&A.
-        """
         count = len(history)
-        deep_count = count - 11  # Frontend handles 11 basic questions first
+        deep_count = count - 9
 
-        # Hard cap: after 10 AI deep questions (15 total), force stop
         if deep_count >= 10:
             return {"question": "", "options": [], "is_final": True}
 
-        # Build a summary of what's been asked to prevent repetition
+        truncated_history = history[-MAX_HISTORY_LENGTH:] if len(history) > MAX_HISTORY_LENGTH else history
+        
         asked_topics = []
-        for h in history:
+        for h in truncated_history:
             asked_topics.append(f"- 问: {h.get('question', '')[:30]}... 答: {h.get('answer', '')[:30]}...")
         asked_summary = "\n".join(asked_topics)
 
-        # Suggest different dimensions based on deep_count
         dimension_suggestions = [
             "对方的性格特点、口头禅或标志性习惯",
             "你们之间最难忘的一个具体瞬间或故事",
@@ -45,9 +47,13 @@ class Generator:
             "对方的家庭近况（如有孩子、父母身体等）",
             "你希望这段祝福传递什么核心情感（感恩/鼓励/思念/期待）",
             "还有什么私密的话平时不好意思说，想借新年说出口",
+            "对方工作或学业上的最新进展",
+            "你们共同的回忆中最有趣的一件事",
+            "对方在朋友圈或社交媒体上最近的动态",
+            "新年里你最想对对方表达的一个心愿",
+            "对方给你留下最深刻印象的一次互动",
         ]
 
-        # Pick the suggested dimension for this round
         current_suggestion = dimension_suggestions[min(deep_count, len(dimension_suggestions) - 1)]
 
         prompt = f"""你是2026丙午马年的春节祝福定制大师。用户正在为好友"{contact_name}"定制一份走心的拜年祝福。
@@ -74,65 +80,75 @@ class Generator:
   "is_final": false
 }}"""
 
-        try:
-            response = self.client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.9
-            )
-            content = response.choices[0].message.content.strip()
+        last_error = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = self.client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.9
+                )
+                content = response.choices[0].message.content.strip()
 
-            # Extract JSON robustly
-            json_match = re.search(r'\{.*\}', content, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group())
-                question = data.get("question", "")
-                options = data.get("options", [])
-                is_final = data.get("is_final", False)
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group())
+                    question = data.get("question", "")
+                    options = data.get("options", [])
+                    is_final = data.get("is_final", False)
 
-                # Safety: force is_final if question is empty
-                if not question:
-                    is_final = True
+                    if not question:
+                        is_final = True
+
+                    return {
+                        "question": question,
+                        "options": options if isinstance(options, list) else [],
+                        "is_final": is_final
+                    }
 
                 return {
-                    "question": question,
-                    "options": options if isinstance(options, list) else [],
-                    "is_final": is_final
+                    "question": current_suggestion + "？",
+                    "options": ["是的，想提一下", "不太需要", "让我想想", "跳过这个"],
+                    "is_final": False
                 }
-
-            # Fallback if JSON parse fails
-            return {
-                "question": current_suggestion + "？",
-                "options": ["是的，想提一下", "不太需要", "让我想想", "跳过这个"],
-                "is_final": False
-            }
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.warning(f"[AI Deep Question Parse Error] {e}", exc_info=True)
-            if deep_count >= 3:
-                return {"question": "", "options": [], "is_final": True}
-            return {
-                "question": f"在新春之际，关于{contact_name}，还有什么想补充的吗？",
-                "options": ["补充一些细节", "差不多了，开始生成吧"],
-                "is_final": False
-            }
-        except (AuthenticationError, RateLimitError, APIError, APITimeoutError) as e:
-            logger.error(f"[AI API Error in get_next_question] {e.__class__.__name__}: {e}")
-            if deep_count >= 3:
-                return {"question": "", "options": [], "is_final": True}
-            return {
-                "question": f"在新春之际，关于{contact_name}，还有什么想补充的吗？",
-                "options": ["补充一些细节", "差不多了，开始生成吧"],
-                "is_final": False
-            }
-        except Exception as e:
-            logger.error(f"[Unexpected Error in get_next_question] {e}", exc_info=True)
-            if deep_count >= 3:
-                return {"question": "", "options": [], "is_final": True}
-            return {
-                "question": f"在新春之际，关于{contact_name}，还有什么想补充的吗？",
-                "options": ["补充一些细节", "差不多了，开始生成吧"],
-                "is_final": False
-            }
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                last_error = e
+                logger.warning(f"[AI Deep Question Parse Error] Attempt {attempt+1}/{MAX_RETRIES}: {e}")
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_DELAY)
+                    continue
+            except (AuthenticationError, RateLimitError) as e:
+                logger.error(f"[AI API Error in get_next_question] {e.__class__.__name__}: {e}")
+                if deep_count >= 3:
+                    return {"question": "", "options": [], "is_final": True}
+                return {
+                    "question": f"在新春之际，关于{contact_name}，还有什么想补充的吗？",
+                    "options": ["补充一些细节", "差不多了，开始生成吧"],
+                    "is_final": False
+                }
+            except (APIError, APITimeoutError) as e:
+                last_error = e
+                logger.warning(f"[AI API Temp Error] Attempt {attempt+1}/{MAX_RETRIES}: {e}")
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_DELAY)
+                    continue
+            except Exception as e:
+                logger.error(f"[Unexpected Error in get_next_question] {e}", exc_info=True)
+                if deep_count >= 3:
+                    return {"question": "", "options": [], "is_final": True}
+                return {
+                    "question": f"在新春之际，关于{contact_name}，还有什么想补充的吗？",
+                    "options": ["补充一些细节", "差不多了，开始生成吧"],
+                    "is_final": False
+                }
+        
+        if deep_count >= 3:
+            return {"question": "", "options": [], "is_final": True}
+        return {
+            "question": f"在新春之际，关于{contact_name}，还有什么想补充的吗？",
+            "options": ["补充一些细节", "差不多了，开始生成吧"],
+            "is_final": False
+        }
 
     def generate_final_greeting(self, contact_name: str, history: list, model: str = "deepseek/deepseek-v3.2") -> str:
         """Generates the final greeting using the full interview history."""
@@ -149,7 +165,21 @@ class Generator:
 3. 绝对文案级水平，拒绝套话，必须融入访谈中提到的具体细节和故事。
 4. 根据用户选择的风格（正式/幽默/煽情等）调整语气。
 5. 根据用户选择的长度要求调整字数，如无特殊要求则在 100-200 字左右。
-6. 直接输出祝福语正文，不要有"以下是为您生成的祝福语"等前缀。
+6. 【输出格式要求 - 极其重要】
+   - 直接输出祝福语正文，不要有任何前缀或后缀
+   - 不要输出"以下是为您生成的祝福语"、"祝您..."等引导语
+   - 不要输出任何解释说明或分析
+   - 输出应该可以直接复制发送
+
+【正确输出示例】
+亲爱的张哥，新年好！马年到了，祝你龙马精神、马到成功！...
+
+【错误输出示例 - 绝对禁止】
+以下是为您生成的祝福语：
+亲爱的张哥，新年好！...
+
+或者：
+祝您：亲爱的张哥，新年好！...
 """
         try:
             response = self.client.chat.completions.create(

@@ -10,9 +10,12 @@ import wechat_service
 from generator import Generator
 import pandas as pd
 import os
+import re
 import logging
 import config
 import threading
+import uuid
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -24,7 +27,18 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Rate limiter
+MAX_REQUEST_BODY_SIZE = 10 * 1024 * 1024
+
+@app.middleware("http")
+async def limit_request_body_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_REQUEST_BODY_SIZE:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": "请求体大小超过限制 (最大 10MB)"}
+        )
+    return await call_next(request)
+
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 
@@ -43,21 +57,38 @@ class GeneratorStorage:
     _instance = None
     _generator = None
     _lock = threading.Lock()
+    _created_at = None
+    _MAX_AGE_SECONDS = 3600
 
     @classmethod
     def set_generator(cls, generator: Generator):
         with cls._lock:
             cls._generator = generator
+            cls._created_at = time.time()
 
     @classmethod
     def get_generator(cls) -> Optional[Generator]:
         with cls._lock:
+            if cls._generator is None:
+                return None
+            if cls._created_at and (time.time() - cls._created_at > cls._MAX_AGE_SECONDS):
+                logger.info("Generator instance expired, clearing...")
+                cls._generator = None
+                cls._created_at = None
+                return None
             return cls._generator
 
     @classmethod
     def clear_generator(cls):
         with cls._lock:
             cls._generator = None
+            cls._created_at = None
+
+    @classmethod
+    def refresh_timestamp(cls):
+        with cls._lock:
+            if cls._generator is not None:
+                cls._created_at = time.time()
 
 class ConfigRequest(BaseModel):
     api_key: str = Field(..., min_length=10, max_length=200, description="OpenRouter API Key")
@@ -132,6 +163,9 @@ def get_final_greeting(req: FinalGreetingRequest, request: Request):
 @limiter.limit("10/minute")
 def export_contacts(req: ExportRequest, request: Request):
     import tempfile
+    import os
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
     
     contacts_data = []
     for c in req.contacts:
@@ -148,8 +182,18 @@ def export_contacts(req: ExportRequest, request: Request):
         df.to_csv(f.name, index=False, encoding='utf-8-sig')
         temp_path = f.name
     
-    from fastapi.responses import FileResponse
-    return FileResponse(temp_path, filename="wechat_greetings_export.csv", media_type='text/csv')
+    def cleanup():
+        try:
+            os.unlink(temp_path)
+        except:
+            pass
+    
+    return FileResponse(
+        temp_path, 
+        filename="wechat_greetings_export.csv", 
+        media_type='text/csv',
+        background=BackgroundTask(cleanup)
+    )
 
 @app.post("/wechat/login")
 @limiter.limit("5/minute")
@@ -168,10 +212,15 @@ def get_friends(request: Request):
     friends = wechat_service.get_friends()
     return {"count": len(friends), "friends": friends}
 
+@app.post("/wechat/logout")
+@limiter.limit("5/minute")
+def logout_wechat(request: Request):
+    wechat_service.logout()
+    return {"status": "logged_out"}
+
 @app.post("/contacts/parse_manual")
 @limiter.limit("30/minute")
 def parse_manual(req: ManualInputRequest, request: Request):
-    import re
     raw_text = req.text
     text = re.sub(r'[,，;；]', '\n', raw_text)
     lines = [line.strip() for line in text.split('\n') if line.strip()]
@@ -196,8 +245,17 @@ async def parse_file(request: Request, file: UploadFile = File(...)):
     import io
     
     MAX_FILE_SIZE = 10 * 1024 * 1024
+    ALLOWED_EXTENSIONS = {'.xlsx', '.xls', '.csv', '.txt'}
     
     filename = file.filename or ""
+    file_ext = '.' + filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"不支持的文件类型: {file_ext}。支持: Excel (.xlsx/.xls), CSV (.csv), TXT (.txt)"
+        )
+    
     content = await file.read()
     
     if len(content) > MAX_FILE_SIZE:

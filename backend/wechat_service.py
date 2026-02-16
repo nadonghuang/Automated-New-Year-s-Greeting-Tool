@@ -9,22 +9,48 @@ from PIL import Image
 
 import logging
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global state
-qr_code_base64 = None
-is_logged_in = False
-login_status = "IDLE" # IDLE, WAITING_SCAN, LOGGED_IN, FAILED
-last_error = None
+_state_lock = threading.Lock()
+_qr_code_base64 = None
+_is_logged_in = False
+_login_status = "IDLE"
+_last_error = None
+_login_start_time = None
+LOGIN_TIMEOUT = 120
+
+def _get_state():
+    with _state_lock:
+        global _login_start_time
+        current_status = _login_status
+        if current_status == "WAITING_SCAN" and _login_start_time:
+            if time.time() - _login_start_time > LOGIN_TIMEOUT:
+                current_status = "TIMEOUT"
+        return {
+            "qr_code": _qr_code_base64,
+            "is_logged_in": _is_logged_in,
+            "login_status": current_status,
+            "last_error": _last_error
+        }
+
+def _set_state(qr_code=None, is_logged_in=None, login_status=None, last_error=None):
+    with _state_lock:
+        global _qr_code_base64, _is_logged_in, _login_status, _last_error
+        if qr_code is not None:
+            _qr_code_base64 = qr_code
+        if is_logged_in is not None:
+            _is_logged_in = is_logged_in
+        if login_status is not None:
+            _login_status = login_status
+        if last_error is not None:
+            _last_error = last_error
 
 def qr_callback(uuid, status, qrcode):
-    global qr_code_base64, login_status
     logger.info(f"QR Callback: status={status} (type: {type(status)}), uuid={uuid}")
     
     if str(status) == '0' or status == 0:
-        login_status = "WAITING_SCAN"
+        _set_state(login_status="WAITING_SCAN")
         logger.info(f"Generating QR code for UUID: {uuid}")
         
         try:
@@ -37,65 +63,71 @@ def qr_callback(uuid, status, qrcode):
             buffered = io.BytesIO()
             img.save(buffered, format="PNG")
             img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-            qr_code_base64 = f"data:image/png;base64,{img_b64}"
+            _set_state(qr_code=f"data:image/png;base64,{img_b64}")
             logger.info("QR code generated successfully")
         except Exception as e:
             logger.error(f"Failed to generate QR: {e}")
             
     elif str(status) == '200' or status == 200:
-        login_status = "LOGGED_IN"
-        qr_code_base64 = None
+        _set_state(login_status="LOGGED_IN", qr_code=None)
 
 def login_thread():
-    global is_logged_in, login_status, last_error
     try:
         itchat.auto_login(hotReload=False, qrCallback=qr_callback, statusStorageDir='itchat.pkl')
-        is_logged_in = True
-        login_status = "LOGGED_IN"
-        last_error = None
+        _set_state(is_logged_in=True, login_status="LOGGED_IN", last_error=None)
     except Exception as e:
         logger.error(f"Login failed detected in thread", exc_info=True)
-        login_status = "FAILED"
-        is_logged_in = False
-        last_error = str(e)
+        _set_state(login_status="FAILED", is_logged_in=False, last_error=str(e))
 
 def start_login():
-    global login_status, last_error
-    login_status = "WAITING_SCAN"
-    last_error = None
+    global _login_start_time
+    with _state_lock:
+        _login_start_time = time.time()
+    _set_state(login_status="WAITING_SCAN", last_error=None)
     t = threading.Thread(target=login_thread)
     t.daemon = True
     t.start()
 
 def get_status():
-    global login_status, qr_code_base64, is_logged_in, last_error
-    if is_logged_in:
-         login_status = "LOGGED_IN"
+    state = _get_state()
+    if state["is_logged_in"]:
+        _set_state(login_status="LOGGED_IN")
     
     return {
-        "status": login_status,
-        "qr_code": qr_code_base64,
-        "is_logged_in": is_logged_in,
-        "error": last_error
+        "status": state["login_status"],
+        "qr_code": state["qr_code"],
+        "is_logged_in": state["is_logged_in"],
+        "error": state["last_error"]
     }
 
 def get_friends():
-    if not is_logged_in:
+    state = _get_state()
+    if not state["is_logged_in"]:
         return []
     try:
         friends = itchat.get_friends(update=True)
-        # Process friends list to return simple structure
+        if not friends:
+            return []
+        
+        my_user = itchat.search_friends()
+        my_username = my_user.get('UserName') if my_user else None
+        
         processed_friends = []
+        seen_usernames = set()
+        
         for f in friends:
-            # Skip self
-            if f['UserName'] == itchat.search_friends()['UserName']:
+            username = f.get('UserName')
+            if not username or username == my_username:
                 continue
+            
+            if username in seen_usernames:
+                continue
+            seen_usernames.add(username)
                 
             name = f.get('RemarkName') or f.get('NickName') or "Unknown"
-            avatar = f.get('HeadImgUrl') # We might need to fetch this through itchat
             
             processed_friends.append({
-                "id": f.get('UserName'),
+                "id": username,
                 "name": name,
                 "nickname": f.get('NickName'),
                 "remark": f.get('RemarkName'),
@@ -108,10 +140,8 @@ def get_friends():
         return []
 
 def logout():
-    global is_logged_in, login_status
     try:
         itchat.logout()
-    except:
+    except Exception:
         pass
-    is_logged_in = False
-    login_status = "IDLE"
+    _set_state(is_logged_in=False, login_status="IDLE")

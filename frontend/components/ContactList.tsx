@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Search, User, Sparkles, CheckCircle2, ChevronRight, X, UserPlus, Pencil, Trash2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Search, User, Sparkles, CheckCircle2, ChevronRight, X, UserPlus, Pencil, Trash2, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -29,12 +29,27 @@ export default function ContactList({
     onDelete?: (contact: Contact) => void
 }) {
     const [search, setSearch] = useState("");
+    const [filterStatus, setFilterStatus] = useState<'all' | 'generated' | 'not-generated'>('all');
 
-    const filtered = contacts.filter(c =>
-        c.name.toLowerCase().includes(search.toLowerCase()) || 
-        (c.nickname && c.nickname.toLowerCase().includes(search.toLowerCase())) || 
-        (c.remark && c.remark.toLowerCase().includes(search.toLowerCase()))
-    );
+    const filtered = useMemo(() => {
+        const searchLower = search.toLowerCase();
+        return contacts.filter(c => {
+            // 搜索过滤
+            const matchesSearch = c.name.toLowerCase().includes(searchLower) || 
+                (c.nickname && c.nickname.toLowerCase().includes(searchLower)) || 
+                (c.remark && c.remark.toLowerCase().includes(searchLower));
+            
+            // 状态筛选
+            let matchesFilter = true;
+            if (filterStatus === 'generated') {
+                matchesFilter = !!c.greeting;
+            } else if (filterStatus === 'not-generated') {
+                matchesFilter = !c.greeting;
+            }
+            
+            return matchesSearch && matchesFilter;
+        });
+    }, [contacts, search, filterStatus]);
 
     const getAvatarColor = (name: string) => {
         const colors = [
@@ -94,6 +109,46 @@ export default function ContactList({
                             <X size={14} />
                         </button>
                     )}
+                </div>
+
+                {/* Filter Buttons */}
+                <div className="flex gap-2 mt-3">
+                    <button
+                        onClick={() => setFilterStatus('all')}
+                        className={cn(
+                            "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-bold transition-all border",
+                            filterStatus === 'all'
+                                ? "bg-cny-red/20 border-cny-red/40 text-cny-red"
+                                : "bg-white/[0.02] border-white/5 text-gray-500 hover:bg-white/[0.05] hover:text-gray-400"
+                        )}
+                    >
+                        <Filter size={12} />
+                        全部
+                    </button>
+                    <button
+                        onClick={() => setFilterStatus('generated')}
+                        className={cn(
+                            "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-bold transition-all border",
+                            filterStatus === 'generated'
+                                ? "bg-cny-red/20 border-cny-red/40 text-cny-red"
+                                : "bg-white/[0.02] border-white/5 text-gray-500 hover:bg-white/[0.05] hover:text-gray-400"
+                        )}
+                    >
+                        <Filter size={12} />
+                        已生成
+                    </button>
+                    <button
+                        onClick={() => setFilterStatus('not-generated')}
+                        className={cn(
+                            "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-bold transition-all border",
+                            filterStatus === 'not-generated'
+                                ? "bg-cny-red/20 border-cny-red/40 text-cny-red"
+                                : "bg-white/[0.02] border-white/5 text-gray-500 hover:bg-white/[0.05] hover:text-gray-400"
+                        )}
+                    >
+                        <Filter size={12} />
+                        未生成
+                    </button>
                 </div>
             </div>
 

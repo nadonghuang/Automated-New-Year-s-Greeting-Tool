@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { Settings, Sparkles, MessageSquareHeart, Send, ShieldAlert, Zap, Github, Heart, BrainCircuit, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,12 +27,6 @@ interface Contact {
   signature?: string;
 }
 
-interface LastAnswers {
-  basic: Array<{ question: string; answer: string }>;
-  deep: Array<{ question: string; answer: string }>;
-  timestamp: number;
-}
-
 export default function Home() {
   const [mode, setMode] = useState<'scan' | 'manual' | 'file'>('manual');
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -50,13 +44,11 @@ export default function Home() {
   const [deletedContacts, setDeletedContacts] = useState<Contact[]>([]);
   const [defaultModel, setDefaultModel] = useState("deepseek/deepseek-v3.2");
   const [configLoading, setConfigLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
 
   // Multi-task state
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-
-  // Temporary answers storage for regeneration
-  const [lastAnswers, setLastAnswers] = useState<LastAnswers | null>(null);
 
   // Generate stable random particles on client side only
   const [goldParticles, setGoldParticles] = useState<Array<{id: number, left: number, duration: number, delay: number, opacity: number}>>([]);
@@ -129,16 +121,15 @@ export default function Home() {
     }
   }, [contacts]);
 
-  const handleContactsLoaded = (newContacts: Contact[]) => {
-    // Unique merge
+  const handleContactsLoaded = useCallback((newContacts: Contact[]) => {
     setContacts(prev => {
       const combined = [...prev, ...newContacts];
       const unique = Array.from(new Map(combined.map(item => [item.name, item])).values());
       return unique;
     });
-  };
+  }, []);
 
-  const handleAddContact = (name: string, remark?: string) => {
+  const handleAddContact = useCallback((name: string, remark?: string) => {
     setContacts(prev => {
       const exists = prev.some(c => c.name === name);
       if (exists) {
@@ -155,21 +146,24 @@ export default function Home() {
       toast.success(`已添加好友 "${name}"`);
       return [...prev, newContact];
     });
-  };
+  }, []);
 
-  const handleEditContact = (contact: Contact) => {
+  const handleEditContact = useCallback((contact: Contact) => {
     setEditingContact(contact);
     setShowEditContactModal(true);
-  };
+  }, []);
 
-  const handleSaveEditContact = (updatedContact: Contact) => {
+  const handleSaveEditContact = useCallback((updatedContact: Contact) => {
     setContacts(prev => prev.map(c => c.id === updatedContact.id ? updatedContact : c));
     toast.success(`已更新好友 "${updatedContact.name}"`);
-  };
+  }, []);
 
   const handleDeleteContact = (contact: Contact) => {
     setContacts(prev => prev.filter(c => c.id !== contact.id));
-    setDeletedContacts(prev => [...prev, contact]);
+    setDeletedContacts(prev => {
+      const newDeleted = [...prev, contact];
+      return newDeleted.slice(-20);
+    });
     toast(
       `已删除好友 "${contact.name}"`,
       {
@@ -222,6 +216,7 @@ export default function Home() {
   };
 
   const handleExport = async () => {
+    setExportLoading(true);
     try {
       const response = await axios.post(`${API_BASE_URL}/contacts/export`, {
         contacts: contacts
@@ -239,6 +234,8 @@ export default function Home() {
       toast.success("导出成功");
     } catch (e) {
       toast.error("导出失败");
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -583,9 +580,18 @@ export default function Home() {
                     <div className="flex gap-3">
                       <button
                         onClick={handleExport}
-                        className="px-10 py-5 rounded-2xl btn-hongbao text-white hover:scale-105 active:scale-95 transition-all text-xs font-black uppercase tracking-widest shadow-2xl flex items-center gap-3 border border-white/10 group"
+                        disabled={exportLoading}
+                        className="px-10 py-5 rounded-2xl btn-hongbao text-white hover:scale-105 active:scale-95 transition-all text-xs font-black uppercase tracking-widest shadow-2xl flex items-center gap-3 border border-white/10 group disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Heart size={18} className="group-hover:fill-current" /> 导出量子名册
+                        {exportLoading ? (
+                          <>
+                            <Loader2 size={18} className="animate-spin" /> 导出中...
+                          </>
+                        ) : (
+                          <>
+                            <Heart size={18} className="group-hover:fill-current" /> 导出量子名册
+                          </>
+                        )}
                       </button>
 
                       <button

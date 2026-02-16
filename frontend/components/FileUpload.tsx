@@ -17,6 +17,12 @@ export default function FileUpload({ onParsed }: FileUploadProps) {
     const [dragActive, setDragActive] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+        return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    };
+
     const handleDrag = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -38,6 +44,13 @@ export default function FileUpload({ onParsed }: FileUploadProps) {
     };
 
     const handleFile = (selectedFile: File) => {
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        
+        if (selectedFile.size > MAX_FILE_SIZE) {
+            toast.error(`文件过大，最大支持 10MB（当前 ${formatFileSize(selectedFile.size)}）`);
+            return;
+        }
+        
         const validTypes = [
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "application/vnd.ms-excel",
@@ -75,12 +88,6 @@ export default function FileUpload({ onParsed }: FileUploadProps) {
         } finally {
             setLoading(false);
         }
-    };
-
-    const formatFileSize = (bytes: number) => {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-        return (bytes / (1024 * 1024)).toFixed(1) + " MB";
     };
 
     return (

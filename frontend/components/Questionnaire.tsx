@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, ChevronLeft, PenTool, MessageCircle, Wand2, X, BrainCircuit, Loader2, Sparkles } from "lucide-react";
 import { cn, API_BASE_URL } from "@/lib/utils";
@@ -35,6 +35,8 @@ const MODELS = [
     { id: "qwen/qwen3-max", name: "Qwen3 Max", desc: "中文语境专家，成语运用自如" },
 ];
 
+const MAX_RETRIES = 3;
+
 // ========== 5 个基础问题 (纯前端，不走 API) ==========
 const BASIC_QUESTIONS = [
     {
@@ -43,7 +45,8 @@ const BASIC_QUESTIONS = [
     },
     {
         question: "您平时怎么称呼对方？（祝福语开头会用到）",
-        options: ["直呼其名", "哥/姐/叔/阿姨等亲属称呼", "老师/领导等职业称呼", "昵称/外号", "宝贝/亲爱的等亲密称呼", "我想自己输入称呼"]
+        options: [],
+        isTextInput: true
     },
     {
         question: "你和对方的关系亲密程度如何？",
@@ -111,6 +114,12 @@ export default function Questionnaire({
     // Custom input
     const [customAnswer, setCustomAnswer] = useState("");
     const [showCustom, setShowCustom] = useState(false);
+
+    // Clear custom input when basic question changes
+    useEffect(() => {
+        setCustomAnswer("");
+        setShowCustom(false);
+    }, [basicIndex]);
 
     // Auto-start with default model
     useEffect(() => {
@@ -187,8 +196,24 @@ export default function Questionnaire({
         }
     };
 
+    const abortControllerRef = useRef<AbortController | null>(null);
+    const retryCountRef = useRef(0);
+
+    useEffect(() => {
+        return () => {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+        };
+    }, []);
+
     // ========== Step 3: AI deep interview ==========
-    const fetchAIQuestion = async (modelId: string, currentHistory: HistoryEntry[]) => {
+    const fetchAIQuestion = async (modelId: string, currentHistory: HistoryEntry[], retryCount = 0) => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = new AbortController();
+        
         setLoadingQuestion(true);
         setCurrentAIQuestion(null);
         try {
@@ -196,10 +221,12 @@ export default function Questionnaire({
                 contact_name: contactName,
                 history: currentHistory,
                 model: modelId
+            }, {
+                signal: abortControllerRef.current.signal,
+                timeout: 30000
             });
 
             if (res.data.is_final || !res.data.question) {
-                // AI says enough info, generate!
                 generateGreeting(modelId, currentHistory);
             } else {
                 const newQuestion = {
@@ -207,20 +234,30 @@ export default function Questionnaire({
                     options: res.data.options || []
                 };
                 setCurrentAIQuestion(newQuestion);
-                const newCount = aiQuestionCount + 1;
-                setAiQuestionCount(newCount);
+                setAiQuestionCount(prev => {
+                    const newCount = prev + 1;
+                    onStepChange?.("ai_deep", { 
+                        history: currentHistory, 
+                        selectedModel: modelId, 
+                        aiQuestionCount: newCount,
+                        currentAIQuestion: newQuestion
+                    });
+                    return newCount;
+                });
                 setShowCustom(false);
                 setCustomAnswer("");
-                onStepChange?.("ai_deep", { 
-                    history: currentHistory, 
-                    selectedModel: modelId, 
-                    aiQuestionCount: newCount,
-                    currentAIQuestion: newQuestion
-                });
+                retryCountRef.current = 0;
             }
         } catch (e: any) {
+            if (e.name === 'AbortError' || e.code === 'ERR_CANCELED') {
+                return;
+            }
             console.error("AI question error:", e);
-            // On error, just go generate with what we have
+            if (retryCount < MAX_RETRIES) {
+                toast(`请求失败，正在重试 (${retryCount + 1}/${MAX_RETRIES})...`, { icon: '🔄' });
+                setTimeout(() => fetchAIQuestion(modelId, currentHistory, retryCount + 1), 1000);
+                return;
+            }
             if (currentHistory.length >= 5) {
                 generateGreeting(modelId, currentHistory);
             } else {
@@ -272,7 +309,7 @@ export default function Questionnaire({
     const totalSteps = BASIC_QUESTIONS.length + aiQuestionCount + (loadingQuestion ? 1 : 0);
     const currentStep = history.length;
 
-    const renderQuestionUI = (question: string, options: string[], onAnswer: (ans: string) => void) => (
+    const renderQuestionUI = (question: string, options: string[], onAnswer: (ans: string) => void, isTextInput?: boolean) => (
         <div className="flex-1 flex flex-col justify-center gap-10 animate-in slide-in-from-right-8 duration-700 ease-out relative">
             <div className="relative">
                 <div className="absolute -left-6 top-1 bottom-1 w-1 bg-cny-red rounded-full shadow-[0_0_15px_rgba(230,0,18,0.5)]" />
@@ -282,7 +319,22 @@ export default function Questionnaire({
                 <p className="text-xs font-black text-cny-gold uppercase tracking-widest mt-3 opacity-80">AI 正在根据您的回答 调优后续生成逻辑...</p>
             </div>
 
-            {!showCustom ? (
+            {isTextInput || options.length === 0 ? (
+                <div className="space-y-6 animate-in zoom-in-98 duration-300">
+                    <textarea
+                        className="w-full h-56 p-8 rounded-3xl bg-black/60 border border-white/10 focus:border-cny-gold focus:bg-black/80 outline-none transition-all font-bold text-white text-xl leading-relaxed placeholder:text-gray-700 shadow-inner"
+                        placeholder="请输入具体的要求或背景信息，帮助 AI 更有温度地创作..."
+                        value={customAnswer}
+                        onChange={(e) => setCustomAnswer(e.target.value)}
+                        autoFocus
+                    />
+                    <button
+                        onClick={() => onAnswer(customAnswer)}
+                        disabled={!customAnswer.trim()}
+                        className="w-full py-5 rounded-2xl btn-hongbao text-white font-black text-xl shadow-2xl transition-all disabled:opacity-20 border border-white/10"
+                    >确认为 TA 注入灵感</button>
+                </div>
+            ) : !showCustom ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {options.map((opt, idx) => (
                         <motion.button
@@ -399,7 +451,8 @@ export default function Questionnaire({
                             {renderQuestionUI(
                                 BASIC_QUESTIONS[basicIndex].question,
                                 BASIC_QUESTIONS[basicIndex].options,
-                                handleBasicAnswer
+                                handleBasicAnswer,
+                                BASIC_QUESTIONS[basicIndex].isTextInput
                             )}
                         </div>
 
@@ -421,7 +474,10 @@ export default function Questionnaire({
                             </div>
                             {basicIndex > 0 && (
                                 <button
-                                    onClick={() => setBasicIndex(prev => prev - 1)}
+                                    onClick={() => {
+                                        setBasicIndex(prev => prev - 1);
+                                        setHistory(prev => prev.slice(0, -1));
+                                    }}
                                     className="w-full py-4 rounded-2xl bg-white/5 text-gray-400 font-bold hover:bg-white/10 hover:text-white transition-all border border-white/10 text-xs uppercase tracking-widest flex items-center justify-center gap-2"
                                 >
                                     <ChevronLeft size={16} />
