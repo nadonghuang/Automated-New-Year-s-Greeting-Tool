@@ -19,7 +19,25 @@
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-tech-stack">Tech Stack</a> •
   <a href="#%EF%B8%8F-configuration">Configuration</a> •
+  <a href="#-faq">FAQ</a> •
+  <a href="#-roadmap">Roadmap</a> •
+  <a href="#-star-history">Stars</a> •
   <a href="#-license">License</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/nadonghuang/Automated-New-Year-s-Greeting-Tool/stargazers">
+    <img src="https://img.shields.io/github/stars/nadonghuang/Automated-New-Year-s-Greeting-Tool?style=flat-square&logo=github&color=yellow" alt="Stars"/>
+  </a>
+  <a href="https://github.com/nadonghuang/Automated-New-Year-s-Greeting-Tool/network/members">
+    <img src="https://img.shields.io/github/forks/nadonghuang/Automated-New-Year-s-Greeting-Tool?style=flat-square&logo=github&color=blue" alt="Forks"/>
+  </a>
+  <a href="https://github.com/nadonghuang/Automated-New-Year-s-Greeting-Tool/commits">
+    <img src="https://img.shields.io/github/last-commit/nadonghuang/Automated-New-Year-s-Greeting-Tool?style=flat-square&logo=git&color=green" alt="Last commit"/>
+  </a>
+  <a href="https://github.com/nadonghuang/Automated-New-Year-s-Greeting-Tool/issues">
+    <img src="https://img.shields.io/github/issues/nadonghuang/Automated-New-Year-s-Greeting-Tool?style=flat-square&logo=github" alt="Issues"/>
+  </a>
 </p>
 
 ---
@@ -45,6 +63,8 @@
 │                                                 │
 └─────────────────────────────────────────────────┘
 ```
+
+> 💡 **Want a richer demo?** Drop a real screenshot / GIF into `docs/demo.gif` and reference it here — PRs welcome!
 
 ## 🚀 Quick Start
 
@@ -122,6 +142,79 @@ DEFAULT_MODEL=deepseek/deepseek-v3.2
 ├── start.sh                 # One-click launch script
 └── README.md
 ```
+
+## ❓ FAQ
+
+<details>
+<summary><b>🤔 微信会不会封号？</b></summary>
+
+工具基于 [`itchat-uos`](https://github.com/why2lyj/itchat-uos) 实现，采用网页版协议，**理论上不会被封**，但任何非官方客户端都有一定风险。建议：
+- 不要短时间内大量群发（每次 ≤ 50 人）
+- 个人微信使用，避免使用新注册小号
+- 春节前再启动，平时慎用
+</details>
+
+<details>
+<summary><b>🤔 OpenRouter Key 怎么配？</b></summary>
+
+去 [openrouter.ai](https://openrouter.ai) 注册 → 创建 API Key → 复制到 `backend/.env`：
+```bash
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxx
+```
+该 Key 仅用于调用 LLM 生成文案，**不**用于微信通信。
+</details>
+
+<details>
+<summary><b>🤔 能改成群发吗？</b></summary>
+
+可以。修改 `backend/wechat_service.py` 的发送方法，将单个 send 改为遍历群列表即可。**注意**：群发更容易触发微信风控，谨慎使用。
+</details>
+
+<details>
+<summary><b>🤔 离线能用吗？</b></summary>
+
+微信扫码登录需要联网；LLM 文案生成需要联网。生成完文案后可手动复制发送，做到"半离线"。
+</details>
+
+<details>
+<summary><b>🤔 支持哪些 LLM？</b></summary>
+
+理论上 OpenRouter 支持的所有模型都可以，通过 `DEFAULT_MODEL` 切换：
+- `deepseek/deepseek-v3.2`（默认，性价比高）
+- `anthropic/claude-sonnet-4`
+- `openai/gpt-4o`
+- `google/gemini-2.5-pro`
+</details>
+
+<details>
+<summary><b>🤔 生成的语言支持中文以外的吗？</b></summary>
+
+支持，LLM 支持任意语言。修改 prompt 模板即可生成英文、日文、韩文、粤语等版本。
+</details>
+
+## 🗓 Roadmap
+
+| Status | Item | Target |
+|--------|------|--------|
+| ✅ | WeChat 扫码登录 & 联系人读取 | 2026-01 |
+| ✅ | AI 个性化祝福生成（中文） | 2026-01 |
+| ✅ | Next.js Dashboard UI | 2026-02 |
+| 🔄 | 🐉 **2027 蛇年版本** — 增强 prompt + 支持生肖主题 | 2026-12 |
+| 📋 | 多 LLM 路由器（智能切换） | TBD |
+| 📋 | 抖音/小红书版本适配 | TBD |
+| 📋 | Docker 一键部署 | TBD |
+
+> 🐛 有想法？[开个 issue](https://github.com/nadonghuang/Automated-New-Year-s-Greeting-Tool/issues) 一起聊聊。
+
+## ⭐ Star History
+
+<a href="https://star-history.com/#nadonghuang/Automated-New-Year-s-Greeting-Tool&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nadonghuang/Automated-New-Year-s-Greeting-Tool&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nadonghuang/Automated-New-Year-s-Greeting-Tool&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nadonghuang/Automated-New-Year-s-Greeting-Tool&type=Date" />
+  </picture>
+</a>
 
 ## 🤝 Contributing
 
